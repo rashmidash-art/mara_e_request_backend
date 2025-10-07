@@ -1,0 +1,63 @@
+<?php
+
+use App\Http\Controllers\Admin\CategoreController;
+use App\Http\Controllers\Admin\EntitiesController;
+use App\Http\Controllers\Admin\ManagerController;
+use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\Admin\SupplierController;
+use App\Http\Controllers\Admin\WorkFlowController;
+use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\PasswordResetContrller;
+use App\Http\Controllers\Admin\DeprtmentController;
+use App\Http\Controllers\Admin\UserController;
+// use App\Http\Controllers\CategoryController as ControllersCategoryController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
+
+
+Route::post('admin/login', [LoginController::class, 'login']);
+
+Route::post('password/forgot', [PasswordResetContrller::class, 'sendResetLink']);
+Route::post('password/reset', [PasswordResetContrller::class, 'reset']);
+
+
+Route::middleware('auth:api')->group(function () {
+    Route::post('admin/logout', [LoginController::class, 'logout']);
+    Route::get('admin/user', function (Request $request) {
+        return response()->json($request->user());
+    });
+
+
+
+    // -----------------------------
+    // Roles Management (Dynamic CRUD)
+    // Only accessible by Admin
+    // -----------------------------
+    Route::middleware(['auth', 'role:admin'])->group(function () {
+        Route::apiResource('roles', RoleController::class);
+        Route::post('roles/assign', [RoleController::class, 'assignRole']);
+        Route::post('roles/remove', [RoleController::class, 'removeRole']);
+
+        // Master Modules
+        Route::apiResource('entities', EntitiesController::class);
+        Route::apiResource('work-flows', WorkFlowController::class);
+        Route::apiResource('managers', ManagerController::class);
+        Route::apiResource('department', DeprtmentController::class);
+        Route::apiResource('users', UserController::class);
+        Route::apiResource('categore', CategoreController::class);
+        Route::apiResource('supplier', SupplierController::class);
+
+    });
+    // Route::middleware('role:Admin')->group(callback: function () {
+    //     Route::apiResource('roles', RoleController::class);
+
+    //     Route::post('roles/assign', [RoleController::class, 'assignRole']);
+    //     Route::post('roles/remove', [RoleController::class, 'removeRole']);
+    // });
+});
+
+
+// Route::get('/user', function (Request $request) {
+//     return $request->user();
+// })->middleware('auth:api');
