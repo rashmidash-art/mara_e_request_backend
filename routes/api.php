@@ -30,16 +30,19 @@ Route::middleware('auth:api')->group(function () {
 
 
 
+
+
+
     // -----------------------------
     // Roles Management (Dynamic CRUD)
     // Only accessible by Admin
     // -----------------------------
-    Route::middleware(['auth', 'role:admin'])->group(function () {
+
+    Route::middleware(['auth:api', 'permission'])->group(function () {
         Route::apiResource('roles', RoleController::class);
         Route::post('roles/assign', [RoleController::class, 'assignRole']);
         Route::post('roles/remove', [RoleController::class, 'removeRole']);
 
-        // Master Modules
         Route::apiResource('entities', EntitiesController::class);
         Route::apiResource('work-flows', WorkFlowController::class);
         Route::apiResource('managers', ManagerController::class);
@@ -47,17 +50,22 @@ Route::middleware('auth:api')->group(function () {
         Route::apiResource('users', UserController::class);
         Route::apiResource('categore', CategoreController::class);
         Route::apiResource('supplier', SupplierController::class);
-
     });
-    // Route::middleware('role:Admin')->group(callback: function () {
-    //     Route::apiResource('roles', RoleController::class);
 
+
+    // Route::middleware(['auth', 'role:admin'])->group(function () {
+    //     Route::apiResource('roles', RoleController::class);
     //     Route::post('roles/assign', [RoleController::class, 'assignRole']);
     //     Route::post('roles/remove', [RoleController::class, 'removeRole']);
+
+    //     // Master Modules
+    //     Route::apiResource('entities', EntitiesController::class);
+    //     Route::apiResource('work-flows', WorkFlowController::class);
+    //     Route::apiResource('managers', ManagerController::class);
+    //     Route::apiResource('department', DeprtmentController::class);
+    //     Route::apiResource('users', UserController::class);
+    //     Route::apiResource('categore', CategoreController::class);
+    //     Route::apiResource('supplier', SupplierController::class);
     // });
+
 });
-
-
-// Route::get('/user', function (Request $request) {
-//     return $request->user();
-// })->middleware('auth:api');

@@ -18,7 +18,8 @@ class RoleController extends Controller
      */
     public function index()
     {
-        return response()->json(Role::all());
+        // return response()->json(Role::all());
+        return response()->json(Role::with('permissions')->get());
     }
 
     /**
@@ -27,117 +28,74 @@ class RoleController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:6',
-            'employee_id' => 'required|string|unique:users,employee_id',
-            'entiti_id' => 'required|integer|exists:entities,id',
-            'department_id' => [
-                'required',
-                'integer',
-                'exists:departments,id',
-                function ($attribute, $value, $fail) use ($request) {
-                    $department = Department::find($value);
-                    if ($department && $department->entiti_id != $request->entiti_id) {
-                        $fail('The selected department does not belong to the specified entity.');
-                    }
-                },
-            ],
-            'loa' => 'required|numeric|min:0',
-            'roles' => 'nullable|array',
-            'roles.*' => 'integer|exists:roles,id',
-            'signature' => 'nullable|string',
-            'status' => ['required', Rule::in(['Active', 'Inactive', 'Away'])],
+            'name' => 'required|string|max:255|unique:roles,name',
+            'display_name' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'status' => ['required', Rule::in([0, 1])],
+            'permission_ids' => 'nullable|array',
+            'permission_ids.*' => 'integer|exists:permissions,id'
         ]);
 
-        try {
-            // Check department budget
-            $department = Department::find($request->department_id);
-            $currentUsersLOA = User::where('department_id', $request->department_id)->sum('loa');
-            $newTotalLOA = $currentUsersLOA + $request->loa;
+        $role = Role::create($request->only('name', 'display_name', 'description', 'status'));
 
-            if ($newTotalLOA > $department->budget) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Cannot create user. Department budget exceeded.',
-                    'department_budget' => $department->budget,
-                    'current_total_loa' => $currentUsersLOA,
-                    'requested_loa' => $request->loa
-                ], 401);
-            }
-
-            // Create user
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'password' => Hash::make($request->password),
-                'employee_id' => $request->employee_id,
-                'entiti_id' => $request->entiti_id,
-                'department_id' => $request->department_id,
-                'loa' => $request->loa,
-                'signature' => $request->signature,
-                'status' => $request->status,
-            ]);
-
-            // Assign roles if provided
-            if ($request->has('roles') && !empty($request->roles)) {
-                $validRoles = Role::whereIn('id', $request->roles)->pluck('id')->toArray();
-                $user->roles()->sync($validRoles);
-            }
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'User created successfully',
-                'data' => $user
-            ], 201);
-        } catch (QueryException $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to create user',
-                'error' => $e->getMessage()
-            ], 500);
+        // Attach permissions if provided
+        if ($request->has('permission_ids')) {
+            $role->permissions()->sync($request->permission_ids);
         }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Role created successfully',
+            'data' => $role->load('permissions')
+        ], 201);
     }
 
-
     /**
-     * Display the specified resource.
+     * Display a specific role
      */
     public function show($id)
     {
-        $role = Role::findOrFail($id);
+        $role = Role::with('permissions')->findOrFail($id);
         return response()->json($role);
     }
 
     /**
-     * Update the specified resource in storage.
+     * Update a role
      */
     public function update(Request $request, $id)
     {
         $role = Role::findOrFail($id);
 
         $request->validate([
-            'name' => 'required|unique:roles,name,' . $id,
-            'display_name' => 'nullable|string',
+            'name' => 'required|string|unique:roles,name,' . $id,
+            'display_name' => 'nullable|string|max:255',
             'description' => 'nullable|string',
-            'status' => 'in:0,1',
+            'status' => ['required', Rule::in([0, 1])],
+            'permission_ids' => 'nullable|array',
+            'permission_ids.*' => 'integer|exists:permissions,id'
         ]);
 
-        $role->update($request->only(['name', 'display_name', 'description', 'status']));
+        $role->update($request->only('name', 'display_name', 'description', 'status'));
+
+        // Update permissions
+        if ($request->has('permission_ids')) {
+            $role->permissions()->sync($request->permission_ids);
+        }
 
         return response()->json([
             'status' => 'success',
             'message' => 'Role updated successfully',
-            'data' => $role
+            'data' => $role->load('permissions')
         ]);
     }
 
     /**
-     * Remove the specified resource from storage.
+     * Delete a role
      */
     public function destroy($id)
     {
         $role = Role::findOrFail($id);
+        $role->permissions()->detach();
         $role->delete();
 
         return response()->json(['status' => 'success', 'message' => 'Role deleted successfully']);
