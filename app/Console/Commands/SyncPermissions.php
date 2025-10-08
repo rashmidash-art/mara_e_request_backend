@@ -1,5 +1,6 @@
 <?php
 
+
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
@@ -14,32 +15,45 @@ class SyncPermissions extends Command
 
     public function handle()
     {
+        // Get all routes with middleware 'auth:api' and 'permission'
         $routes = collect(Route::getRoutes())->filter(function ($route) {
-            return Str::startsWith($route->uri(), 'api/') && $route->getActionName() !== 'Closure';
+            // Check if the route uses 'auth:api' and 'permission' middleware
+            $middleware = $route->middleware();
+            return Str::startsWith($route->uri(), 'api/') &&
+                   in_array('auth:api', $middleware) &&
+                   in_array('permission', $middleware);
         });
 
         $uniqueUris = [];
 
         foreach ($routes as $route) {
-            // Remove 'api/' prefix
+            // Directly capture the route URI
             $uri = str_replace('api/', '', $route->uri());
 
-            // Remove any parameters like {id}
+            // Remove any parameters like {id}, keeping the base URI
             $uri = preg_replace('/\{.*?\}/', '', $uri);
 
-            // Trim slashes and make it clean
-            $uri = trim($uri, '/');
+            // Remove trailing slashes from the URI
+            $uri = rtrim($uri, '/');
 
-            // If route is resource, ensure we store only once per base URI
-            $baseUri = explode('/', $uri)[0]; // e.g. 'entities'
-
-            // Store only unique base URIs
-            $uniqueUris[$baseUri] = [
-                'display_name' => Str::title(str_replace('-', ' ', $baseUri)),
-                'description' => "Auto-generated permission for resource: {$baseUri}"
+            // Store only unique URIs
+            $uniqueUris[$uri] = [
+                'display_name' => Str::title(str_replace('-', ' ', $uri)),
+                'description' => "Auto-generated permission for resource: {$uri}"
             ];
         }
 
+        // Explicitly add custom permissions for 'assign' and 'remove' routes
+        $uniqueUris['roles-assign'] = [
+            'display_name' => 'Assign Role',
+            'description' => 'Permission to assign roles to users'
+        ];
+        $uniqueUris['roles-remove'] = [
+            'display_name' => 'Remove Role',
+            'description' => 'Permission to remove roles from users'
+        ];
+
+        // Store permissions in DB
         foreach ($uniqueUris as $name => $details) {
             Permission::firstOrCreate(
                 ['name' => $name],

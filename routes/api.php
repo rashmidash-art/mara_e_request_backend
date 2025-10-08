@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\Admin\CategoreController;
+use App\Http\Controllers\Admin\DocumentController;
 use App\Http\Controllers\Admin\EntitiesController;
+use App\Http\Controllers\Admin\FileFormatController;
 use App\Http\Controllers\Admin\ManagerController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SupplierController;
@@ -29,10 +31,6 @@ Route::middleware('auth:api')->group(function () {
     });
 
 
-
-
-
-
     // -----------------------------
     // Roles Management (Dynamic CRUD)
     // Only accessible by Admin
@@ -50,6 +48,8 @@ Route::middleware('auth:api')->group(function () {
         Route::apiResource('users', UserController::class);
         Route::apiResource('categore', CategoreController::class);
         Route::apiResource('supplier', SupplierController::class);
+        Route::apiResource('fileformat', FileFormatController::class);
+        Route::apiResource('document', DocumentController::class);
     });
 
 
