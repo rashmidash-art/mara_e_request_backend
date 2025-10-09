@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Entiti;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class EntitiesController extends Controller
 {
@@ -30,25 +32,29 @@ class EntitiesController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:entitis,email',
+            'password' => 'nullable|string|min:6',
+            'company_code' => 'nullable|string|max:50',
+            'budget' => 'nullable|numeric',
             'description' => 'nullable|string',
-            // add your entity-specific validation rules here
+            'status' => ['nullable', Rule::in([0, 1])]
         ]);
 
-        $entity = Entiti::create(
-            [
-                'name' => $request->name,
-                'company_code' => $request->company_code,
-                'bc_dimention_value' => $request->bc_dimention_value,
-                'description' => $request->description,
-                'budget' => $request->budget ?? 0,
-                'status' => $request->status ?? 0
-            ]
-        );
+        $entity = Entiti::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => isset($validated['password']) ? Hash::make($validated['password']) : null,
+
+            'company_code' => $validated['company_code'] ?? null,
+            'budget' => $validated['budget'] ?? 0,
+            'description' => $validated['description'] ?? null,
+            'status' => $validated['status'] ?? 0,
+        ]);
 
         return response()->json([
             'status' => 'success',
             'message' => 'Entity created successfully',
-            'data' => $entity,
+            'data' => $entity
         ], 201);
     }
 
@@ -65,30 +71,35 @@ class EntitiesController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, string $id)
     {
         $entity = Entiti::findOrFail($id);
 
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
+            'email' => ['sometimes', 'required', 'email', Rule::unique('entitis', 'email')->ignore($entity->id)],
+            'password' => 'nullable|string|min:6',
+            'company_code' => 'nullable|string|max:50',
+            'budget' => 'nullable|numeric',
             'description' => 'nullable|string',
-            // your update rules here
+            'status' => ['nullable', Rule::in([0, 1])]
         ]);
 
         $entity->update([
-            'name' => $request->name,
-            'company_code' => $request->company_code,
-            'bc_dimention_value' => $request->bc_dimention_value,
-            'description' => $request->description,
-            'budget' => $request->budget ?? 0,
-            'status' => $request->status ?? 0
+            'name' => $validated['name'] ?? $entity->name,
+            'email' => $validated['email'] ?? $entity->email,
+            'password' => isset($validated['password']) ? Hash::make($validated['password']) : $entity->password,
+            'company_code' => $validated['company_code'] ?? $entity->company_code,
+            'budget' => $validated['budget'] ?? $entity->budget,
+            'description' => $validated['description'] ?? $entity->description,
+            'status' => $validated['status'] ?? $entity->status,
         ]);
 
         return response()->json([
             'status' => 'success',
             'message' => 'Entity updated successfully',
-            'data' => $entity,
-        ]);
+            'data' => $entity->refresh()
+        ], 200);
     }
 
     /**

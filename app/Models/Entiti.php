@@ -2,24 +2,31 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Laravel\Passport\HasApiTokens; // or use Laravel\Sanctum\HasApiTokens
+use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
-
-class Entiti extends Model
+class Entiti extends Authenticatable
 {
-    use HasFactory;
-     protected $fillable = [
+    use HasApiTokens, HasFactory, Notifiable;
+
+    protected $fillable = [
         "name",
+        "email",
         "company_code",
         "budget",
         "description",
+        "password",
         "status"
     ];
 
-    public function departments()
-{
-    return $this->hasMany(Department::class, 'entiti_id');
-}
+    protected $hidden = [
+        'password', 'remember_token',
+    ];
 
+    public function departments()
+    {
+        return $this->hasMany(Department::class, 'entiti_id');
+    }
 }

@@ -43,9 +43,14 @@ return [
 
 
         'api' => [
-        'driver' => 'passport',
-        'provider' => 'users',
-    ],
+            'driver' => 'passport',
+            'provider' => 'users',
+        ],
+
+        'entiti-api' => [
+            'driver' => 'passport',
+            'provider' => 'entitis',
+        ],
     ],
 
     /*
@@ -69,6 +74,12 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', App\Models\User::class),
+        ],
+
+
+        'entitis' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\Entiti::class,
         ],
 
         // 'users' => [

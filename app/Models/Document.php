@@ -10,10 +10,10 @@ class Document extends Model
     use HasFactory;
     protected $fillable = [
         'name',
-        'work_flow_ids',
-        'role_ids',
-        'fileformat_ids',
-        'categorie_ids',
+        'work_flow_id',
+        'role_id',
+        'fileformat_id',
+        'categorie_id',
         'max_count',
         'expiry_days',
         'description',
@@ -22,10 +22,5 @@ class Document extends Model
         'is_enable'
     ];
 
-    protected $casts = [
-        'work_flow_ids' => 'array',
-        'role_ids' => 'array',
-        'fileformat_ids' => 'array',
-        'categorie_ids' => 'array',
-    ];
+
 }

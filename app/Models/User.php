@@ -30,6 +30,7 @@ class User extends Authenticatable
         'loa',
         'signature',
         'status',
+        'user_type'
     ];
 
     /**
@@ -72,17 +73,21 @@ class User extends Authenticatable
 
     public function permissions()
     {
-        // Return a Collection of permission names
+        // Get all permissions via roles
         return $this->roles()->with('permissions')
-            ->get()
-            ->pluck('permissions')
-            ->flatten()
-            ->pluck('name')
-            ->unique();
+            ->get() // gets all roles
+            ->pluck('permissions') // pluck each role's permissions
+            ->flatten() // merge into single collection
+            ->pluck('name') // get permission names
+            ->unique()
+            ->values(); // reset keys
     }
 
     public function hasPermission($permission)
     {
-        return $this->permissions()->contains($permission);
+        // Ensure string comparison
+        return $this->permissions()->contains(function ($permName) use ($permission) {
+            return trim($permName) === trim($permission);
+        });
     }
 }
