@@ -55,7 +55,7 @@ class LoginController extends Controller
 
             return response()->json([
                 'status'       => 'success',
-                'type'         => $user->user_type == 0 ? 'super_admin' : 'user',
+                'type'         => $user->user_type == 0 ? 'superadmin' : 'user',
                 'user'         => $user,
                 'token'        => $token,
                 'permissions'  => $permissions,
