@@ -42,7 +42,7 @@ class LoginController extends Controller
                 $token = $user->createToken('API Token')->accessToken;
                 Log::info('Token created successfully for user ID: ' . $user->id);
             } catch (\Exception $e) {
-                Log::error('Token creation failed for user ID: ' . $user->id . ' Error: ' . $e->getMessage());
+                Log::error(message: 'Token creation failed for user ID: ' . $user->id . ' Error: ' . $e->getMessage());
                 return response()->json([
                     'status'  => 'error',
                     'message' => 'Token creation failed'
@@ -55,7 +55,7 @@ class LoginController extends Controller
 
             return response()->json([
                 'status'       => 'success',
-                'type'         => 'user',
+                'type'         => $user->user_type == 0 ? 'super_admin' : 'user',
                 'user'         => $user,
                 'token'        => $token,
                 'permissions'  => $permissions,
@@ -96,7 +96,6 @@ class LoginController extends Controller
         // If neither user nor entity matched
         return response()->json(['status' => 'error', 'message' => 'Invalid credentials'], 401);
     }
-
 
     public function logout(Request $request)
     {

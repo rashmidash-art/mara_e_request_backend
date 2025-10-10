@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\EntitiesController;
 use App\Http\Controllers\Admin\FileFormatController;
 use App\Http\Controllers\Admin\ManagerController;
 use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\Admin\RolePermissionController;
 use App\Http\Controllers\Admin\SupplierController;
 use App\Http\Controllers\Admin\WorkFlowController;
 use App\Http\Controllers\Auth\LoginController;
@@ -41,6 +42,19 @@ Route::middleware('auth:api')->group(function () {
         Route::post('roles/assign', [RoleController::class, 'assignRole']);
         Route::post('roles/remove', [RoleController::class, 'removeRole']);
 
+
+        // -----------------------------
+        // 🔒 Role Permission Management
+        // -----------------------------
+        Route::prefix('roles')->group(function () {
+            Route::post('permissions/assign', [RolePermissionController::class, 'assignPermissions']);
+            Route::post('permissions/remove', [RolePermissionController::class, 'removePermission']);
+            Route::get('{role_id}/permissions', [RolePermissionController::class, 'getRolePermissions']);
+        });
+
+        // -----------------------------
+        // Master Modules
+        // -----------------------------
         Route::apiResource('entities', EntitiesController::class);
         Route::apiResource('work-flows', WorkFlowController::class);
         Route::apiResource('managers', ManagerController::class);
