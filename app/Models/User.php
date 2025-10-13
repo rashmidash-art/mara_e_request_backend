@@ -90,4 +90,7 @@ class User extends Authenticatable
             return trim($permName) === trim($permission);
         });
     }
+
+
+
 }
