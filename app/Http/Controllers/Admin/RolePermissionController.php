@@ -12,6 +12,23 @@ class RolePermissionController extends Controller
     /**
      * Assign multiple permissions to a role.
      */
+
+    public function allpermissions()
+    {
+        $permissions = Permission::all();
+
+        if ($permissions->isEmpty()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No permissions found.'
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $permissions
+        ], 200);
+    }
     public function assignPermissions(Request $request)
     {
         $request->validate([
