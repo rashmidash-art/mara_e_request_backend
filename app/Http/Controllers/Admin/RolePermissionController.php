@@ -26,6 +26,7 @@ class RolePermissionController extends Controller
 
         return response()->json([
             'status' => 'success',
+            'message' => 'All permissions fetched successfully.',
             'data' => $permissions
         ], 200);
     }

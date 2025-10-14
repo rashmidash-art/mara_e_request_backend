@@ -14,10 +14,10 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
 
-        // $this->call(class: AdminSeeder::class);
-        // $this->call(PermissionSeeder::class);
-        // $this->call(RemoveEntityPermissionsSeeder::class);
-        // $this->call(BudgetSeeder::class);
+        $this->call(class: AdminSeeder::class);
+        $this->call(PermissionSeeder::class);
+        $this->call(RemoveEntityPermissionsSeeder::class);
+        $this->call(BudgetSeeder::class);
 
     }
 }
