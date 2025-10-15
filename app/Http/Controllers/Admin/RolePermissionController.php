@@ -38,29 +38,34 @@ class RolePermissionController extends Controller
             'role_id' => 'required|exists:roles,id',
             'permission_ids' => 'required|array',
             'permission_ids.*' => 'integer|exists:permissions,id',
-            'action' => 'required|in:assign,remove', // must be either assign or remove
         ]);
 
         $role = Role::findOrFail($request->role_id);
 
-        if ($request->action === 'assign') {
-            // Add new permissions without removing old ones
-            $role->permissions()->syncWithoutDetaching($request->permission_ids);
-            $message = 'Permissions assigned successfully.';
-        } else {
-            // Remove specific permissions
-            $role->permissions()->detach($request->permission_ids);
-            $message = 'Permissions removed successfully.';
+        $attached = [];
+        $detached = [];
+
+        foreach ($request->permission_ids as $permissionId) {
+            if ($role->permissions->contains($permissionId)) {
+                // If already has permission → remove it
+                $role->permissions()->detach($permissionId);
+                $detached[] = $permissionId;
+            } else {
+                // If doesn’t have permission → assign it
+                $role->permissions()->attach($permissionId);
+                $attached[] = $permissionId;
+            }
         }
 
         return response()->json([
             'status' => 'success',
-            'message' => $message,
+            'message' => 'Permissions updated successfully.',
+            'attached_permissions' => $attached,
+            'detached_permissions' => $detached,
             'role_id' => $role->id,
-            'permission_ids' => $request->permission_ids,
-            'action' => $request->action,
         ]);
     }
+
 
 
     public function getRolePermissions($role_id)
