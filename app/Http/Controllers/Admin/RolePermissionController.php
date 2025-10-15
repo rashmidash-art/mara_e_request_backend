@@ -42,29 +42,17 @@ class RolePermissionController extends Controller
 
         $role = Role::findOrFail($request->role_id);
 
-        $attached = [];
-        $detached = [];
-
-        foreach ($request->permission_ids as $permissionId) {
-            if ($role->permissions->contains($permissionId)) {
-                // If already has permission → remove it
-                $role->permissions()->detach($permissionId);
-                $detached[] = $permissionId;
-            } else {
-                // If doesn’t have permission → assign it
-                $role->permissions()->attach($permissionId);
-                $attached[] = $permissionId;
-            }
-        }
+        // Sync permissions: will assign new ones and remove unchecked ones
+        $role->permissions()->sync($request->permission_ids);
 
         return response()->json([
             'status' => 'success',
             'message' => 'Permissions updated successfully.',
-            'attached_permissions' => $attached,
-            'detached_permissions' => $detached,
             'role_id' => $role->id,
+            'assigned_permissions' => $request->permission_ids,
         ]);
     }
+
 
 
 
