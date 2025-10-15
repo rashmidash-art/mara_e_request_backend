@@ -48,6 +48,8 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::post('roles/remove', [RoleController::class, 'removeRole']);
 
 
+
+
         // -----------------------------
         // 🔒 Role Permission Management
         // -----------------------------
@@ -58,6 +60,8 @@ Route::middleware('auth:api,entiti-api')->group(function () {
             Route::post('permissions/assign', [RolePermissionController::class, 'assignPermissions']);
             Route::post('permissions/remove', [RolePermissionController::class, 'removePermission']);
             Route::get('{role_id}/permissions', [RolePermissionController::class, 'getRolePermissions']);
+
+            Route::post('permissions/manage', [RolePermissionController::class, 'manageRolePermissions']);
         });
 
 
