@@ -81,6 +81,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('work-flows', WorkFlowController::class);
         Route::apiResource('managers', ManagerController::class);
         Route::apiResource('department', DeprtmentController::class);
+        Route::get('users/search', [UserController::class, 'search']);
         Route::apiResource('users', UserController::class);
         Route::apiResource('categore', CategoreController::class);
         Route::apiResource('supplier', SupplierController::class);

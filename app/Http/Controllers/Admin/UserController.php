@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Models\Entiti;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -18,7 +19,7 @@ class UserController extends Controller
     public function index()
     {
         try {
-            $users = User::where('user_type' , 1 && 'status', 'Active')->get();
+            $users = User::with('roles')->where('user_type', 1)->get();
             return response()->json([
                 'status' => 'success',
                 'message' => 'Users retrieved successfully',
@@ -40,12 +41,11 @@ class UserController extends Controller
     public function store(Request $request)
     {
         try {
-            // Validation
+            // Validation (no employee_id from client)
             $request->validate([
                 'name' => 'required|string|max:255',
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:6',
-                'employee_id' => 'required|string|unique:users,employee_id',
                 'entiti_id' => 'required|integer|exists:entitis,id',
                 'department_id' => 'required|integer|exists:departments,id',
                 'loa' => 'required|numeric|min:0',
@@ -54,9 +54,11 @@ class UserController extends Controller
                 'roles' => 'sometimes|array',
             ]);
 
-            // Check department belongs to entity
+            // Get entity & department
             $department = Department::find($request->department_id);
-            if (!$department || $department->entiti_id != $request->entiti_id) {
+            $entity = Entiti::find($request->entiti_id);
+
+            if (!$department || !$entity || $department->entiti_id != $entity->id) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'The selected department does not belong to the specified entity.'
@@ -72,14 +74,32 @@ class UserController extends Controller
                 ], 400);
             }
 
+            // Generate employee_id: ENTDE0001
+            $entityCode = strtoupper(substr($entity->name, 0, 2));
+            $departmentCode = strtoupper(substr($department->name, 0, 2));
+
+            $lastUser = User::where('entiti_id', $entity->id)
+                ->where('department_id', $department->id)
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($lastUser && preg_match('/\d+$/', $lastUser->employee_id, $matches)) {
+                $lastNumber = intval($matches[0]);
+                $nextNumber = $lastNumber + 1;
+            } else {
+                $nextNumber = 1;
+            }
+
+            $employeeId = $entityCode . $departmentCode . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+
             // Create user
-            $user = User::create([
+            $user = User::with('roles')->create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
-                'employee_id' => $request->employee_id,
-                'entiti_id' => $request->entiti_id,
-                'department_id' => $request->department_id,
+                'employee_id' => $employeeId,
+                'entiti_id' => $entity->id,
+                'department_id' => $department->id,
                 'loa' => $request->loa,
                 'signature' => $request->signature ?? '',
                 'status' => $request->status,
@@ -169,7 +189,7 @@ class UserController extends Controller
     public function show($id)
     {
         try {
-            $user = User::findOrFail($id);
+            $user = User::with('roles')->findOrFail($id);
 
             return response()->json([
                 'status' => 'success',
@@ -189,6 +209,7 @@ class UserController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Update a user.
@@ -313,6 +334,54 @@ class UserController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete user',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
+    public function search(Request $request)
+    {
+        try {
+            $request->validate([
+                'keyword' => 'required|string'
+            ]);
+
+            $keyword = trim($request->keyword);
+
+            $users = User::with('roles')
+                ->where('user_type', 1)
+                ->where(function ($q) use ($keyword) {
+                    $q->whereRaw('LOWER(employee_id) LIKE ?', ['%' . strtolower($keyword) . '%'])
+                        ->orWhereRaw('LOWER(name) LIKE ?', ['%' . strtolower($keyword) . '%'])
+                        ->orWhereRaw('LOWER(email) LIKE ?', ['%' . strtolower($keyword) . '%']);
+                })
+                ->get();
+
+            if ($users->isEmpty()) {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'No matching users found',
+                    'data' => []
+                ], 200);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Users found successfully',
+                'data' => $users
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (QueryException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Database error',
                 'error' => $e->getMessage()
             ], 500);
         }
