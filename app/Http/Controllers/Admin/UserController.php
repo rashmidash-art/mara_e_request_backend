@@ -18,7 +18,7 @@ class UserController extends Controller
     public function index()
     {
         try {
-            $users = User::all();
+            $users = User::where('user_type' , 1 && 'status', 'Active')->get();
             return response()->json([
                 'status' => 'success',
                 'message' => 'Users retrieved successfully',
@@ -94,7 +94,7 @@ class UserController extends Controller
                 'status' => 'success',
                 'message' => 'User created successfully',
                 'data' => $user
-            ], 201);
+            ], 200);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'status' => 'error',
@@ -153,7 +153,7 @@ class UserController extends Controller
     //             'status' => 'success',
     //             'message' => 'User created successfully',
     //             'data' => $user
-    //         ], 201);
+    //         ], 200);
     //     } catch (QueryException $e) {
     //         return response()->json([
     //             'status' => 'error',
