@@ -41,11 +41,12 @@ class UserController extends Controller
     public function store(Request $request)
     {
         try {
-            // Validation (no employee_id from client)
+            // Validation
             $request->validate([
                 'name' => 'required|string|max:255',
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:6',
+                'employee_id' => 'required|string|unique:users,employee_id', // comes from frontend
                 'entiti_id' => 'required|integer|exists:entitis,id',
                 'department_id' => 'required|integer|exists:departments,id',
                 'loa' => 'required|numeric|min:0',
@@ -74,32 +75,14 @@ class UserController extends Controller
                 ], 400);
             }
 
-            // Generate employee_id: ENTDE0001
-            $entityCode = strtoupper(substr($entity->name, 0, 2));
-            $departmentCode = strtoupper(substr($department->name, 0, 2));
-
-            $lastUser = User::where('entiti_id', $entity->id)
-                ->where('department_id', $department->id)
-                ->orderBy('id', 'desc')
-                ->first();
-
-            if ($lastUser && preg_match('/\d+$/', $lastUser->employee_id, $matches)) {
-                $lastNumber = intval($matches[0]);
-                $nextNumber = $lastNumber + 1;
-            } else {
-                $nextNumber = 1;
-            }
-
-            $employeeId = $entityCode . $departmentCode . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
-
-            // Create user
+            // Create user using employee_id from frontend
             $user = User::with('roles')->create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
-                'employee_id' => $employeeId,
-                'entiti_id' => $entity->id,
-                'department_id' => $department->id,
+                'employee_id' => $request->employee_id, // now comes from frontend API
+                'entiti_id' => $request->entiti_id,
+                'department_id' => $request->department_id,
                 'loa' => $request->loa,
                 'signature' => $request->signature ?? '',
                 'status' => $request->status,
@@ -125,6 +108,77 @@ class UserController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to create user',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
+    // public function nextEmployeeId()
+    // {
+    //     try {
+    //         // Get all employee IDs starting with "EMP" and followed by digits
+    //         $lastId = User::where('employee_id', 'LIKE', 'EMP%')
+    //             ->selectRaw("MAX(CAST(SUBSTRING(employee_id, 4) AS UNSIGNED)) as max_id")
+    //             ->value('max_id');
+
+    //         $nextNumber = $lastId ? $lastId + 1 : 1;
+
+    //         $nextEmployeeId = 'EMP' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'Next employee ID retrieved successfully',
+    //             'data' => [
+    //                 'employee_id' => $nextEmployeeId
+    //             ]
+    //         ], 200);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Failed to retrieve next employee ID',
+    //             'error' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
+
+    public function nextEmployeeId()
+    {
+        try {
+            // Fetch all employee_ids starting with 'EMP' in ascending order
+            $employeeIds = User::where('employee_id', 'LIKE', 'EMP%')
+                ->pluck('employee_id')
+                ->map(function ($id) {
+                    return intval(substr($id, 3)); // extract numeric part
+                })
+                ->sort()
+                ->values();
+
+            // Find the first missing number in the sequence
+            $nextNumber = 1;
+            foreach ($employeeIds as $number) {
+                if ($number == $nextNumber) {
+                    $nextNumber++;
+                } else {
+                    break; // found a gap
+                }
+            }
+
+            $nextEmployeeId = 'EMP' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Next employee ID retrieved successfully',
+                'data' => [
+                    'employee_id' => $nextEmployeeId
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to retrieve next employee ID',
                 'error' => $e->getMessage()
             ], 500);
         }
