@@ -39,13 +39,14 @@ class LoginController extends Controller
             Log::info('Password matched for user ID: ' . $user->id);
 
             try {
-                $token = $user->createToken('API Token')->accessToken;
+                $token = $user->createToken('User table clientt')->accessToken;
                 Log::info('Token created successfully for user ID: ' . $user->id);
             } catch (\Exception $e) {
                 Log::error(message: 'Token creation failed for user ID: ' . $user->id . ' Error: ' . $e->getMessage());
                 return response()->json([
                     'status'  => 'error',
-                    'message' => 'Token creation failed'
+                    'message' => 'Token creation failed',
+                    'error_message' => $e->getMessage(),
                 ], 500);
             }
 
