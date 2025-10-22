@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Entiti;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -113,6 +114,17 @@ class EntitiesController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Entity deleted successfully',
+        ]);
+    }
+
+
+    public function getUserbyEntiti($id)
+    {
+        $users = User::where('entiti_id', $id)->get();
+
+        return response()->json([
+            'status' => 'success',
+            'users' => $users
         ]);
     }
 }

@@ -77,15 +77,24 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         // -----------------------------
         // Master Modules
         // -----------------------------
+        // For Entitis
         Route::apiResource('entities', EntitiesController::class);
+        Route::get('entities/{id}/users', action: [EntitiesController::class, 'getUserbyEntiti']);
+
+
         Route::apiResource('work-flows', WorkFlowController::class);
         Route::apiResource('managers', ManagerController::class);
+
+        // For Department
         Route::apiResource('department', DeprtmentController::class);
         Route::get('entities/{id}/departments', [DeprtmentController::class, 'getByEntity']);
+        Route::get('department/{id}/users', action: [DeprtmentController::class, 'getUserbyDepartment']);
 
+        // For Users
         Route::get('users/search', [UserController::class, 'search']);
         Route::get('users/next-employee-id', [UserController::class, 'nextEmployeeId']);
         Route::apiResource('users', UserController::class);
+
         Route::apiResource('categore', CategoreController::class);
         // routes/api.php
         Route::apiResource('supplier', SupplierController::class);

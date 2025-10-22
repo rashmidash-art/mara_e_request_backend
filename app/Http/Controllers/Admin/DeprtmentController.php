@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\Entiti;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
@@ -265,6 +266,18 @@ class DeprtmentController extends Controller
         return response()->json([
             'status' => 'success',
             'departments' => $departments
+        ]);
+    }
+
+
+
+    public function getUserbyDepartment($id)
+    {
+        $users = User::where('department_id', $id)->get();
+
+        return response()->json([
+            'status' => 'success',
+            'users' => $users
         ]);
     }
 }

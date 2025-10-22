@@ -41,21 +41,21 @@ class UserController extends Controller
     public function store(Request $request)
     {
         try {
-            // Validation
+            // ✅ Fix validation keys
             $request->validate([
                 'name' => 'required|string|max:255',
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:6',
-                'employee_id' => 'required|string|unique:users,employee_id', // comes from frontend
+                'employee_id' => 'required|string|unique:users,employee_id', // ✅ no space
                 'entiti_id' => 'required|integer|exists:entitis,id',
                 'department_id' => 'required|integer|exists:departments,id',
                 'loa' => 'required|numeric|min:0',
-                'signature' => 'nullable|string',
+                'signature' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048',
                 'status' => ['required', Rule::in(['Active', 'Inactive', 'Away'])],
                 'roles' => 'sometimes|array',
             ]);
 
-            // Get entity & department
+            // Entity and department validation
             $department = Department::find($request->department_id);
             $entity = Entiti::find($request->entiti_id);
 
@@ -75,20 +75,32 @@ class UserController extends Controller
                 ], 400);
             }
 
-            // Create user using employee_id from frontend
-            $user = User::with('roles')->create([
+            // Create user first
+            $user = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
-                'employee_id' => $request->employee_id, // now comes from frontend API
+                'employee_id' => $request->employee_id,
                 'entiti_id' => $request->entiti_id,
                 'department_id' => $request->department_id,
                 'loa' => $request->loa,
-                'signature' => $request->signature ?? '',
+                'signature' => '',
                 'status' => $request->status,
             ]);
 
-            // Sync roles if provided
+            // ✅ Upload signature if present
+            if ($request->hasFile('signature')) {
+                $file = $request->file('signature');
+                $extension = $file->getClientOriginalExtension(); // ✅ fixed
+                $filename = 'uid_' . $user->id . '_signature.' . $extension;
+
+                $path = $file->storeAs('upload/signature', $filename, 'public');
+
+                $user->signature = $path;
+                $user->save();
+            }
+
+            // Sync roles
             if ($request->has('roles')) {
                 $user->roles()->sync($request->roles);
             }
@@ -112,6 +124,7 @@ class UserController extends Controller
             ], 500);
         }
     }
+
 
 
 
@@ -271,7 +284,6 @@ class UserController extends Controller
     public function update(Request $request, $id)
     {
         try {
-            // Validation
             $request->validate([
                 'name' => 'sometimes|required|string|max:255',
                 'email' => ['sometimes', 'required', 'email', Rule::unique('users')->ignore($id)],
@@ -280,19 +292,18 @@ class UserController extends Controller
                 'entiti_id' => 'sometimes|required|integer|exists:entitis,id',
                 'department_id' => 'sometimes|required|integer|exists:departments,id',
                 'loa' => 'sometimes|required|numeric|min:0',
-                'signature' => 'nullable|string',
+                'signature' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048', // ✅ file validation
                 'status' => ['sometimes', 'required', Rule::in(['Active', 'Inactive', 'Away'])],
                 'roles' => 'sometimes|array',
             ]);
 
             $user = User::findOrFail($id);
 
-            // Determine department for budget check
+            // Validate department belongs to entity
             $department_id = $request->department_id ?? $user->department_id;
             $department = Department::find($department_id);
-
-            // Department-entity check
             $entiti_id = $request->entiti_id ?? $user->entiti_id;
+
             if (!$department || $department->entiti_id != $entiti_id) {
                 return response()->json([
                     'status' => 'error',
@@ -314,7 +325,7 @@ class UserController extends Controller
                 }
             }
 
-            // Fill fields
+            // Fill other fields
             $data = $request->only([
                 'name',
                 'email',
@@ -325,15 +336,27 @@ class UserController extends Controller
                 'status'
             ]);
 
-            $data['signature'] = $request->signature ?? '';
-            $user->fill($data);
-
             if ($request->has('password')) {
-                $user->password = Hash::make($request->password);
+                $data['password'] = Hash::make($request->password);
             }
 
-            $user->save();
+            // ✅ Handle file upload
+            if ($request->hasFile('signature')) {
+                $file = $request->file('signature');
+                $extension = $file->getClientOriginalExtension();
+                $filename = 'uid_' . $user->id . '_signature.' . $extension;
 
+                $path = $file->storeAs('upload/signature', $filename, 'public');
+
+                // Optionally delete old file here if needed
+                // Storage::disk('public')->delete($user->signature);
+
+                $data['signature'] = $path;
+            }
+
+            $user->update($data);
+
+            // Sync roles
             if ($request->has('roles')) {
                 $user->roles()->sync($request->roles);
             }
@@ -362,6 +385,7 @@ class UserController extends Controller
             ], 500);
         }
     }
+
 
 
 

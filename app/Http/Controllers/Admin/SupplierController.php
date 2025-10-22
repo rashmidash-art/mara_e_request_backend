@@ -63,11 +63,10 @@ class SupplierController extends Controller
             'address' => 'required|string',
             'tax_id' => 'required|string|max:100',
             'regi_no' => 'required|string|max:100',
-
+            'entiti_id' => 'requires|string|255',
             // CSV strings
             'categories' => 'required|string|max:255',
             'departments' => 'required|string|max:255',
-
             // Multi-file fields
             'regi_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
             'tax_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
@@ -153,6 +152,7 @@ class SupplierController extends Controller
             'tax_id' => 'sometimes|required|string|max:100',
             'regi_no' => 'sometimes|required|string|max:100',
             'categories' => 'sometimes|required|string|max:255',
+            'entiti_id' => 'sometimes|required|string|max:255',
             'departments' => 'sometimes|required|string|max:255',
             'regi_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
             'tax_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',

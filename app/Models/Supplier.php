@@ -19,6 +19,7 @@ class Supplier extends Model
         "tax_id",
         "regi_no",
         "categories",
+        "entiti_id",
         "departments",
         "regi_certificates",
         "tax_certificates",
