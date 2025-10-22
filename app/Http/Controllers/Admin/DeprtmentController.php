@@ -256,4 +256,15 @@ class DeprtmentController extends Controller
             ], 500);
         }
     }
+
+
+    public function getByEntity($id)
+    {
+        $departments = Department::where('entiti_id', $id)->get();
+
+        return response()->json([
+            'status' => 'success',
+            'departments' => $departments
+        ]);
+    }
 }

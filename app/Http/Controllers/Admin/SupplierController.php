@@ -63,23 +63,28 @@ class SupplierController extends Controller
             'address' => 'required|string',
             'tax_id' => 'required|string|max:100',
             'regi_no' => 'required|string|max:100',
-            'categories' => 'required|string|max:255',     // CSV string
-            'departments' => 'required|string|max:255',    // CSV string
+
+            // CSV strings
+            'categories' => 'required|string|max:255',
+            'departments' => 'required|string|max:255',
+
+            // Multi-file fields
             'regi_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
             'tax_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
             'insurance_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+
             'status' => 'nullable|string|max:255',
             'bc_status' => 'nullable|string|max:255',
             'compliance' => 'nullable|string|max:255',
         ]);
 
-        // Handle multiple file uploads
+        // ✅ File uploads: save and store CSV of paths
         foreach (['regi_certificates', 'tax_certificates', 'insurance_certificates'] as $field) {
             if ($request->hasFile($field)) {
-                $paths = [];
-                foreach ($request->file($field) as $file) {
-                    $paths[] = $file->store("upload/$field", 'public');
-                }
+                $paths = collect($request->file($field))
+                    ->map(fn($file) => $file->store("upload/{$field}", 'public'))
+                    ->toArray();
+
                 $validated[$field] = implode(',', $paths);
             }
         }
@@ -100,6 +105,7 @@ class SupplierController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Display a specific supplier.
@@ -127,7 +133,7 @@ class SupplierController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Supplier not found',
-               'error' => $e->getMessage()
+                'error' => $e->getMessage()
             ], 401);
         }
     }
