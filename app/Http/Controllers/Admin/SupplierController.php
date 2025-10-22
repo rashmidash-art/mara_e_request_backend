@@ -23,17 +23,14 @@ class SupplierController extends Controller
 
             // Transform suppliers to include category & department details
             $suppliers = $suppliers->map(function ($supplier) {
-                // Category details
-                $categoryIds = $supplier->categorei_id ? explode(',', $supplier->categorei_id) : [];
+                $categoryIds = $supplier->categories ? explode(',', $supplier->categories) : [];
                 $categories = Category::whereIn('id', $categoryIds)->get(['id', 'name']);
 
-                // Department details
-                $departmentIds = $supplier->department_id ? explode(',', $supplier->department_id) : [];
+                $departmentIds = $supplier->departments ? explode(',', $supplier->departments) : [];
                 $departments = Department::whereIn('id', $departmentIds)->get(['id', 'name']);
 
-                // Append readable info
-                $supplier->categories = $categories;
-                $supplier->departments = $departments;
+                $supplier->categories_detail = $categories;
+                $supplier->departments_detail = $departments;
 
                 return $supplier;
             });
@@ -52,7 +49,6 @@ class SupplierController extends Controller
         }
     }
 
-
     /**
      * Store a new supplier.
      */
@@ -67,22 +63,26 @@ class SupplierController extends Controller
             'address' => 'required|string',
             'tax_id' => 'required|string|max:100',
             'regi_no' => 'required|string|max:100',
-            'category_id' => 'required|string|max:255',    // CSV string from API
-            'department_id' => 'required|string|max:255',  // CSV string from API
-            'regi_certificate' => 'nullable|string|max:255',
-            'tax_certificate' => 'nullable|string|max:255',
-            'insurance_certificate' => 'nullable|string|max:255',
-            'status' => ['required', Rule::in(['Active', 'Suspended', 'Bad Rating', 'Inactive'])],
+            'categories' => 'required|string|max:255',     // CSV string
+            'departments' => 'required|string|max:255',    // CSV string
+            'regi_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'tax_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'insurance_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'status' => 'nullable|string|max:255',
             'bc_status' => 'nullable|string|max:255',
             'compliance' => 'nullable|string|max:255',
         ]);
 
-        // Map API fields to DB columns
-        $validated['categorei_id'] = $validated['category_id'];  // important!
-        unset($validated['category_id']);  // remove API key
-
-        $validated['department_id'] = $validated['department_id']; // keep same
-        // if your DB column is department_id, no need to change
+        // Handle multiple file uploads
+        foreach (['regi_certificates', 'tax_certificates', 'insurance_certificates'] as $field) {
+            if ($request->hasFile($field)) {
+                $paths = [];
+                foreach ($request->file($field) as $file) {
+                    $paths[] = $file->store("upload/$field", 'public');
+                }
+                $validated[$field] = implode(',', $paths);
+            }
+        }
 
         try {
             $supplier = Supplier::create($validated);
@@ -91,7 +91,7 @@ class SupplierController extends Controller
                 'status' => 'success',
                 'message' => 'Supplier created successfully',
                 'data' => $supplier
-            ], 201);
+            ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
@@ -101,9 +101,6 @@ class SupplierController extends Controller
         }
     }
 
-
-
-
     /**
      * Display a specific supplier.
      */
@@ -112,17 +109,14 @@ class SupplierController extends Controller
         try {
             $supplier = Supplier::findOrFail($id);
 
-            // Category details
-            $categoryIds = $supplier->categorei_id ? explode(',', $supplier->categorei_id) : [];
-            $categories = \App\Models\Category::whereIn('id', $categoryIds)->get(['id', 'name']);
+            $categoryIds = $supplier->categories ? explode(',', $supplier->categories) : [];
+            $categories = Category::whereIn('id', $categoryIds)->get(['id', 'name']);
 
-            // Department details
-            $departmentIds = $supplier->department_id ? explode(',', $supplier->department_id) : [];
-            $departments = \App\Models\Department::whereIn('id', $departmentIds)->get(['id', 'name']);
+            $departmentIds = $supplier->departments ? explode(',', $supplier->departments) : [];
+            $departments = Department::whereIn('id', $departmentIds)->get(['id', 'name']);
 
-            // Attach related info
-            $supplier->categories = $categories;
-            $supplier->departments = $departments;
+            $supplier->categories_detail = $categories;
+            $supplier->departments_detail = $departments;
 
             return response()->json([
                 'status' => 'success',
@@ -132,17 +126,11 @@ class SupplierController extends Controller
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Supplier not found'
-            ], 404);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Something went wrong',
-                'error' => $e->getMessage()
-            ], 500);
+                'message' => 'Supplier not found',
+               'error' => $e->getMessage()
+            ], 401);
         }
     }
-
 
     /**
      * Update supplier details.
@@ -158,12 +146,12 @@ class SupplierController extends Controller
             'address' => 'sometimes|required|string',
             'tax_id' => 'sometimes|required|string|max:100',
             'regi_no' => 'sometimes|required|string|max:100',
-            'category_id' => 'sometimes|required|string|max:255',    // CSV string from API
-            'department_id' => 'sometimes|required|string|max:255',  // CSV string from API
-            'regi_certificate' => 'nullable|string|max:255',
-            'tax_certificate' => 'nullable|string|max:255',
-            'insurance_certificate' => 'nullable|string|max:255',
-            'status' => ['sometimes', 'required', Rule::in(['Active', 'Suspended', 'Bad Rating', 'Inactive'])],
+            'categories' => 'sometimes|required|string|max:255',
+            'departments' => 'sometimes|required|string|max:255',
+            'regi_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'tax_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'insurance_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+            'status' => 'nullable|string|max:255',
             'bc_status' => 'nullable|string|max:255',
             'compliance' => 'nullable|string|max:255',
         ]);
@@ -171,14 +159,15 @@ class SupplierController extends Controller
         try {
             $supplier = Supplier::findOrFail($id);
 
-            // Map API field to DB column
-            if (isset($validated['category_id'])) {
-                $validated['categorei_id'] = $validated['category_id'];
-                unset($validated['category_id']);
-            }
-
-            if (isset($validated['department_id'])) {
-                $validated['department_id'] = $validated['department_id'];
+            // Handle multiple file uploads
+            foreach (['regi_certificates', 'tax_certificates', 'insurance_certificates'] as $field) {
+                if ($request->hasFile($field)) {
+                    $paths = [];
+                    foreach ($request->file($field) as $file) {
+                        $paths[] = $file->store("upload/$field", 'public');
+                    }
+                    $validated[$field] = implode(',', $paths);
+                }
             }
 
             $supplier->update($validated);
@@ -192,9 +181,9 @@ class SupplierController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Supplier not found',
-                 'error' => $e->getMessage()
+                'error' => $e->getMessage()
             ], 401);
-        } catch (\Exception $e) {
+        } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update supplier',
@@ -202,9 +191,6 @@ class SupplierController extends Controller
             ], 500);
         }
     }
-
-
-
 
     /**
      * Delete a supplier.
@@ -222,8 +208,9 @@ class SupplierController extends Controller
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Supplier not found'
-            ], 404);
+                'message' => 'Supplier not found',
+                'error' => $e->getMessage()
+            ], 401);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',

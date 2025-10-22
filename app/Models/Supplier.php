@@ -18,11 +18,11 @@ class Supplier extends Model
         "address",
         "tax_id",
         "regi_no",
-        "categorei_id",
-        "department_id",
-        "regi_certificate",
-        "tax_certificate",
-        "insurance_certificate",
+        "categories",
+        "departments",
+        "regi_certificates",
+        "tax_certificates",
+        "insurance_certificates",
         "status",
     ];
 

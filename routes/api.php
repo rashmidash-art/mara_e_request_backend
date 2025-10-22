@@ -81,10 +81,13 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('work-flows', WorkFlowController::class);
         Route::apiResource('managers', ManagerController::class);
         Route::apiResource('department', DeprtmentController::class);
+        Route::get('entities/{id}/departments', [DeprtmentController::class, 'getByEntity']);
+
         Route::get('users/search', [UserController::class, 'search']);
         Route::get('users/next-employee-id', [UserController::class, 'nextEmployeeId']);
         Route::apiResource('users', UserController::class);
         Route::apiResource('categore', CategoreController::class);
+        // routes/api.php
         Route::apiResource('supplier', SupplierController::class);
         Route::apiResource('fileformat', FileFormatController::class);
         Route::apiResource('document', DocumentController::class);
