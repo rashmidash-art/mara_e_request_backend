@@ -14,6 +14,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetContrller;
 use App\Http\Controllers\Admin\DeprtmentController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\WorkFlowTypeController;
 // use App\Http\Controllers\CategoryController as ControllersCategoryController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -82,7 +83,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::get('entities/{id}/users', action: [EntitiesController::class, 'getUserbyEntiti']);
 
 
-        Route::apiResource('work-flows', WorkFlowController::class);
+        Route::apiResource('work-flows', WorkFlowTypeController::class);
         Route::apiResource('managers', ManagerController::class);
 
         // For Department

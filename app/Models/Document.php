@@ -10,10 +10,11 @@ class Document extends Model
     use HasFactory;
     protected $fillable = [
         'name',
-        'work_flow_id',
-        'role_id',
-        'fileformat_id',
-        'categorie_id',
+        'entiti_id',
+        'work_flow_steps',
+        'roles',
+        'file_formats',
+        'categories',
         'max_count',
         'expiry_days',
         'description',

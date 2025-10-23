@@ -43,7 +43,7 @@ class DeprtmentController extends Controller
                 'department_code' => 'required|string|max:50|unique:departments,department_code',
                 'bc_dimention_value' => 'required|string|max:255',
                 'enable_cost_center' => 'nullable|integer|in:0,1',
-                'work_flow_id' => 'required|integer|exists:work_flows,id',
+                'work_flow_type_id' => 'required|integer|exists:work_flow_types,id',
                 'description' => 'nullable|string',
                 'budget' => 'nullable|numeric|min:0',
                 'status' => 'nullable|integer|in:0,1'
@@ -58,8 +58,8 @@ class DeprtmentController extends Controller
                 'department_code.unique' => 'Department code already exists.',
                 'bc_dimention_value.required' => 'BC dimension value is required.',
                 'enable_cost_center.in' => 'Enable cost center must be 0 or 1.',
-                'work_flow_id.required' => 'Workflow ID is required.',
-                'work_flow_id.exists' => 'Workflow does not exist.',
+                'work_flow_type_id.required' => 'Work flow type ID is required.',
+                'work_flow_type_id.exists' => 'Work flow type does not exist.',
                 'budget.numeric' => 'Budget must be a number.',
                 'budget.min' => 'Budget cannot be negative.',
                 'description.string' => 'Description must be a valid text.',
@@ -92,7 +92,7 @@ class DeprtmentController extends Controller
                 'department_code' => $request->department_code,
                 'bc_dimention_value' => $request->bc_dimention_value,
                 'enable_cost_center' => $request->enable_cost_center ?? 0,
-                'work_flow_id' => $request->work_flow_id,
+                'work_flow_type_id' => $request->work_flow_type_id,
                 'budget' => $requestedBudget,
                 'description' => $request->description,
                 'status' => $request->status ?? 0
@@ -137,7 +137,8 @@ class DeprtmentController extends Controller
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to retrieve department details'
+                'message' => 'Failed to retrieve department details',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -161,7 +162,7 @@ class DeprtmentController extends Controller
                 'department_code' => 'sometimes|required|string|max:50|unique:departments,department_code,' . $department->id,
                 'bc_dimention_value' => 'sometimes|required|string|max:255',
                 'enable_cost_center' => 'sometimes|integer|in:0,1',
-                'work_flow_id' => 'sometimes|required|integer|exists:work_flows,id',
+                'work_flow_type_id' => 'sometimes|required|integer|exists:work_flow_types,id',
                 'budget' => 'sometimes|numeric|min:0',
                 'description' => 'nullable|string',
                 'status' => 'sometimes|integer|in:0,1'
@@ -171,7 +172,7 @@ class DeprtmentController extends Controller
                 'name.unique' => 'Department name already exists.',
                 'department_code.unique' => 'Department code already exists.',
                 'enable_cost_center.in' => 'Enable cost center must be 0 or 1.',
-                'work_flow_id.exists' => 'Workflow does not exist.',
+                'work_flow_type_id.exists' => 'Work flow type does not exist.',
                 'budget.numeric' => 'Budget must be a number.',
                 'budget.min' => 'Budget cannot be negative.',
                 'description.string' => 'Description must be a valid text.',
@@ -208,7 +209,7 @@ class DeprtmentController extends Controller
                 'department_code' => $request->department_code ?? $department->department_code,
                 'bc_dimention_value' => $request->bc_dimention_value ?? $department->bc_dimention_value,
                 'enable_cost_center' => $request->enable_cost_center ?? $department->enable_cost_center,
-                'work_flow_id' => $request->work_flow_id ?? $department->work_flow_id,
+                'work_flow_type_id' => $request->work_flow_type_id ?? $department->work_flow_type_id,
                 'budget' => $requestedBudget,
                 'description' => $request->description ?? $department->description,
                 'status' => $request->status ?? $department->status
@@ -227,7 +228,7 @@ class DeprtmentController extends Controller
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
@@ -253,7 +254,8 @@ class DeprtmentController extends Controller
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to delete department'
+                'message' => 'Failed to delete department',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

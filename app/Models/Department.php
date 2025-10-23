@@ -16,7 +16,7 @@ class Department extends Model
         'department_code',
         'bc_dimention_value',
         'enable_cost_center',
-        'work_flow_id',
+        'work_flow_type_id',
         'budget',
         'description',
         'status'
@@ -35,9 +35,9 @@ class Department extends Model
     }
 
     // Department belongs to a workflow
-    public function workflow()
+    public function workflowtype()
     {
-        return $this->belongsTo(WorkFlow::class, 'work_flow_id');
+        return $this->belongsTo(WorkFlowType::class, 'work_flow_type_id');
     }
 
     public function suppliers()

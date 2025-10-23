@@ -35,4 +35,9 @@ class Entiti extends Authenticatable
     {
         return $this->hasMany(Department::class, 'entiti_id');
     }
+
+     public function documents()
+    {
+        return $this->hasMany(Document::class, 'entiti_id');
+    }
 }

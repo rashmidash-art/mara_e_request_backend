@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Document;
 use Illuminate\Http\Request;
+use Illuminate\Database\QueryException;
+use Illuminate\Validation\ValidationException;
 
 class DocumentController extends Controller
 {
@@ -13,19 +15,28 @@ class DocumentController extends Controller
      */
     public function index()
     {
-        $documents = Document::all();
+        try {
+            $documents = Document::all();
 
-        if ($documents->isEmpty()) {
+            if ($documents->isEmpty()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No documents found'
+                ], 401);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'All documents retrieved successfully',
+                'data' => $documents
+            ], 200);
+        } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'No documents found'
-            ], 401);
+                'message' => 'Failed to fetch documents',
+                'error' => $e->getMessage()
+            ], 500);
         }
-        return response()->json([
-            'status' => 'success',
-            'message' => 'All documents retrieved successfully',
-            'data' => $documents
-        ], 200);
     }
 
     /**
@@ -33,77 +44,94 @@ class DocumentController extends Controller
      */
     public function store(Request $request)
     {
-        // Validate incoming request data
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'work_flow_ids' => 'nullable|array',
-            'role_ids' => 'nullable|array',
-            'fileformat_ids' => 'nullable|array',
-            'categorie_ids' => 'nullable|array',
-            'max_count' => 'required|integer',
-            'expiry_days' => 'required|integer',
-            'description' => 'required|string',
-            'status' => 'required|integer',
-            'is_mandatory' => 'required|integer',
-            'is_enable' => 'required|integer',
-        ]);
+        try {
+            $request->validate([
+                'name'             => 'required|string|max:255',
+                'entiti_id'        => 'nullable|integer',
+                'work_flow_steps'  => 'nullable|array',
+                'roles'            => 'nullable|array',
+                'file_formats'     => 'nullable|array',
+                'categories'       => 'nullable|array',
+                'max_count'        => 'required|integer',
+                'expiry_days'      => 'required|integer',
+                'description'      => 'required|string',
+                'status'           => 'required|string|max:255',
+                'is_mandatory'     => 'required|integer',
+                'is_enable'        => 'required|integer',
+            ]);
 
-        // Check if document with the same name already exists
-        $existing = Document::where('name', $request->name)->first();
-        if ($existing) {
+            // Check if document with the same name already exists
+            $existing = Document::where('name', $request->name)->first();
+            if ($existing) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Document with this name already exists',
+                ], 401);
+            }
+
+            // Create document
+            $document = Document::create([
+                'name'             => $request->name,
+                'entiti_id'        => $request->entiti_id,
+                'work_flow_steps'  => $request->has('work_flow_steps') ? implode(',', $request->work_flow_steps) : null,
+                'roles'            => $request->has('roles') ? implode(',', $request->roles) : null,
+                'file_formats'     => $request->has('file_formats') ? implode(',', $request->file_formats) : null,
+                'categories'       => $request->has('categories') ? implode(',', $request->categories) : null,
+                'max_count'        => $request->max_count,
+                'expiry_days'      => $request->expiry_days,
+                'description'      => $request->description,
+                'status'           => $request->status,
+                'is_mandatory'     => $request->is_mandatory,
+                'is_enable'        => $request->is_enable,
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Document created successfully',
+                'data' => $document
+            ], 201);
+        } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Document with this name already exists',
-            ], 400);
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 401);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to create document',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        // Implode arrays into comma-separated strings
-        $document = Document::create([
-            'name' => $request->name,
-            'work_flow_id' => $request->has('work_flow_ids') ? implode(',', $request->work_flow_ids) : null,
-            'role_id' => $request->has('role_ids') ? implode(',', $request->role_ids) : null,
-            'fileformat_id' => $request->has('fileformat_ids') ? implode(',', $request->fileformat_ids) : null,
-            'categorie_id' => $request->has('categorie_ids') ? implode(',', $request->categorie_ids) : null,
-            'max_count' => $request->max_count,
-            'expiry_days' => $request->expiry_days,
-            'description' => $request->description,
-            'status' => $request->status,
-            'is_mandatory' => $request->is_mandatory,
-            'is_enable' => $request->is_enable,
-        ]);
-
-        // Return success response
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Document created successfully',
-            'data' => $document
-        ], 200);
     }
-
-
 
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show($id)
     {
-        // Find the document by ID
-        $document = Document::find($id);
+        try {
+            $document = Document::find($id);
 
-        // Check if document exists
-        if (!$document) {
+            if (!$document) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Document not found'
+                ], 401);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Document retrieved successfully',
+                'data' => $document
+            ], 200);
+        } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Document not found'
-            ], 404);
+                'message' => 'Failed to fetch document',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        // Return success response with the document data
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Document retrieved successfully',
-            'data' => $document
-        ], 200);
     }
 
     /**
@@ -111,70 +139,93 @@ class DocumentController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $document = Document::find($id);
+        try {
+            $document = Document::find($id);
 
-        if (!$document) {
+            if (!$document) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Document not found'
+                ], 401);
+            }
+
+            $request->validate([
+                'name'             => 'required|string|max:255|unique:documents,name,' . $id,
+                'entiti_id'        => 'nullable|integer',
+                'work_flow_steps'  => 'nullable|array',
+                'roles'            => 'nullable|array',
+                'file_formats'     => 'nullable|array',
+                'categories'       => 'nullable|array',
+                'max_count'        => 'required|integer',
+                'expiry_days'      => 'required|integer',
+                'description'      => 'required|string',
+                'status'           => 'required|string|max:255',
+                'is_mandatory'     => 'required|integer',
+                'is_enable'        => 'required|integer',
+            ]);
+
+            $document->update([
+                'name'             => $request->name,
+                'entiti_id'        => $request->entiti_id,
+                'work_flow_steps'  => $request->has('work_flow_steps') ? implode(',', $request->work_flow_steps) : $document->work_flow_steps,
+                'roles'            => $request->has('roles') ? implode(',', $request->roles) : $document->roles,
+                'file_formats'     => $request->has('file_formats') ? implode(',', $request->file_formats) : $document->file_formats,
+                'categories'       => $request->has('categories') ? implode(',', $request->categories) : $document->categories,
+                'max_count'        => $request->max_count,
+                'expiry_days'      => $request->expiry_days,
+                'description'      => $request->description,
+                'status'           => $request->status,
+                'is_mandatory'     => $request->is_mandatory,
+                'is_enable'        => $request->is_enable,
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Document updated successfully',
+                'data' => $document
+            ], 200);
+        } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Document not found'
-            ], 404);
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 401);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to update document',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $request->validate([
-            'name' => 'required|string|max:255|unique:documents,name,' . $id,
-            'work_flow_ids' => 'nullable|array',
-            'role_ids' => 'nullable|array',
-            'fileformat_ids' => 'nullable|array',
-            'categorie_ids' => 'nullable|array',
-            'max_count' => 'required|integer',
-            'expiry_days' => 'required|integer',
-            'description' => 'required|string',
-            'status' => 'required|integer',
-            'is_mandatory' => 'required|integer',
-            'is_enable' => 'required|integer',
-        ]);
-
-        $document->update([
-            'name' => $request->name,
-            'work_flow_id' => isset($request->work_flow_ids) ? implode(',', $request->work_flow_ids) : null,
-            'role_id' => isset($request->role_ids) ? implode(',', $request->role_ids) : null,
-            'fileformat_id' => isset($request->fileformat_ids) ? implode(',', $request->fileformat_ids) : null,
-            'categorie_id' => isset($request->categorie_ids) ? implode(',', $request->categorie_ids) : null,
-            'max_count' => $request->max_count,
-            'expiry_days' => $request->expiry_days,
-            'description' => $request->description,
-            'status' => $request->status,
-            'is_mandatory' => $request->is_mandatory,
-            'is_enable' => $request->is_enable,
-        ]);
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Document updated successfully',
-            'data' => $document
-        ], 200);
     }
-
 
     /**
      * Remove the specified resource from storage.
      */
     public function destroy($id)
     {
-        $document = Document::find($id);
+        try {
+            $document = Document::find($id);
 
-        if (!$document) {
+            if (!$document) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Document not found'
+                ], 401);
+            }
+
+            $document->delete();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Document deleted successfully'
+            ], 200);
+        } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Document not found'
-            ], 404);
+                'message' => 'Failed to delete document',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $document->delete();
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Document deleted successfully'
-        ], 200);
     }
 }
