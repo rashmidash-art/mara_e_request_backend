@@ -35,6 +35,10 @@ return new class extends Migration
             if (Schema::hasColumn('documents', 'status')) {
                 $table->string('status')->nullable()->change();
             }
+
+            if (Schema::hasColumn('documents', 'work_flow_type_id')) {
+                 $table->renameColumn('work_flow_type_id', 'work_flow_steps');
+            }
         });
     }
 
@@ -63,6 +67,10 @@ return new class extends Migration
 
             if (Schema::hasColumn('documents', 'status')) {
                 $table->integer('status')->default(0)->comment('0=Active 1=Inactive')->change();
+            }
+
+            if (Schema::hasColumn('documents', 'work_flow_steps')) {
+                $table->renameColumn('work_flow_steps','work_flow_type_id');
             }
         });
     }
