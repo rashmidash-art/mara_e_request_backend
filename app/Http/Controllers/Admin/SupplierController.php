@@ -63,7 +63,7 @@ class SupplierController extends Controller
             'address' => 'required|string',
             'tax_id' => 'required|string|max:100',
             'regi_no' => 'required|string|max:100',
-            'entiti_id' => 'requires|string|255',
+            'entiti_id' => 'required|string|max:255',
             // CSV strings
             'categories' => 'required|string|max:255',
             'departments' => 'required|string|max:255',
@@ -80,14 +80,17 @@ class SupplierController extends Controller
         // ✅ File uploads: save and store CSV of paths
         foreach (['regi_certificates', 'tax_certificates', 'insurance_certificates'] as $field) {
             if ($request->hasFile($field)) {
-                $paths = collect($request->file($field))
-                    ->map(fn($file) => $file->store("upload/{$field}", 'public'))
+                $filenames = collect($request->file($field))
+                    ->map(function ($file) use ($field) {
+                        $filename = $file->getClientOriginalName(); // ✅ Original name only
+                        $file->storeAs("upload/{$field}", $filename, 'public');
+                        return $filename;
+                    })
                     ->toArray();
 
-                $validated[$field] = implode(',', $paths);
+                $validated[$field] = implode(',', $filenames); // ✅ Store only filenames
             }
         }
-
         try {
             $supplier = Supplier::create($validated);
 
