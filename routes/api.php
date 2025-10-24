@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\DocumentController;
 use App\Http\Controllers\Admin\EntitiesController;
 use App\Http\Controllers\Admin\FileFormatController;
 use App\Http\Controllers\Admin\ManagerController;
+use App\Http\Controllers\Admin\RequestTypeController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\RolePermissionController;
 use App\Http\Controllers\Admin\SupplierController;
@@ -97,6 +98,9 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('users', UserController::class);
 
         Route::apiResource('categore', CategoreController::class);
+        Route::apiResource('request_type', RequestTypeController::class);
+        Route::apiResource('workflow', WorkFlowController::class);
+
         // routes/api.php
         Route::apiResource('supplier', SupplierController::class);
         Route::apiResource('fileformat', FileFormatController::class);
