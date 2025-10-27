@@ -122,7 +122,7 @@ class WorkFlowController extends Controller
                 'status' => 'error',
                 'message' => 'Workflow not found',
                 'error' => $e->getMessage()
-            ], 404);
+            ], 401);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',

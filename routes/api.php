@@ -10,11 +10,13 @@ use App\Http\Controllers\Admin\RequestTypeController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\RolePermissionController;
 use App\Http\Controllers\Admin\SupplierController;
+use App\Http\Controllers\Admin\WorkFlow_RoleAssignController;
 use App\Http\Controllers\Admin\WorkFlowController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetContrller;
 use App\Http\Controllers\Admin\DeprtmentController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\WorkFlowStepsController;
 use App\Http\Controllers\Admin\WorkFlowTypeController;
 // use App\Http\Controllers\CategoryController as ControllersCategoryController;
 use Illuminate\Http\Request;
@@ -100,6 +102,10 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('categore', CategoreController::class);
         Route::apiResource('request_type', RequestTypeController::class);
         Route::apiResource('workflow', WorkFlowController::class);
+        Route::apiResource('workflowsteps', WorkFlowStepsController::class);
+        Route::post('/workflowsteps/reorder', [WorkFlowStepsController::class, 'reorder']);
+        Route::apiResource('workflow_role/assign', WorkFlow_RoleAssignController::class);
+
 
         // routes/api.php
         Route::apiResource('supplier', SupplierController::class);
