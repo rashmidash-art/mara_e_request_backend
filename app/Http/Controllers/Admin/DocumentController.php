@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Document;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class DocumentController extends Controller
@@ -45,10 +46,11 @@ class DocumentController extends Controller
     public function store(Request $request)
     {
         try {
+
             $request->validate([
                 'name'             => 'required|string|max:255',
                 'entiti_id'        => 'nullable|integer',
-                'work_flow_steps'  => 'nullable|array',
+                'workflow_id'      => 'required|integer|exists:workflows,id', // ✅ Send from frontend
                 'roles'            => 'nullable|array',
                 'file_formats'     => 'nullable|array',
                 'categories'       => 'nullable|array',
@@ -60,23 +62,28 @@ class DocumentController extends Controller
                 'is_enable'        => 'required|integer',
             ]);
 
-            // Check if document with the same name already exists
-            $existing = Document::where('name', $request->name)->first();
-            if ($existing) {
+            // ✅ Fetch workflow steps according to the workflow_id received
+            $steps = DB::table('workflow_steps')
+                ->where('workflow_id', $request->workflow_id)
+                ->pluck('id')
+                ->toArray();
+
+            if (empty($steps)) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Document with this name already exists',
+                    'message' => 'No steps found for the selected workflow'
                 ], 401);
             }
 
-            // Create document
+            // ✅ Create document
             $document = Document::create([
                 'name'             => $request->name,
                 'entiti_id'        => $request->entiti_id,
-                'work_flow_steps'  => $request->has('work_flow_steps') ? implode(',', $request->work_flow_steps) : null,
-                'roles'            => $request->has('roles') ? implode(',', $request->roles) : null,
-                'file_formats'     => $request->has('file_formats') ? implode(',', $request->file_formats) : null,
-                'categories'       => $request->has('categories') ? implode(',', $request->categories) : null,
+                'workflow_id'      => $request->workflow_id,
+                'work_flow_steps'  => implode(',', $steps),
+                'roles'            => $request->roles ? implode(',', $request->roles) : null,
+                'file_formats'     => $request->file_formats ? implode(',', $request->file_formats) : null,
+                'categories'       => $request->categories ? implode(',', $request->categories) : null,
                 'max_count'        => $request->max_count,
                 'expiry_days'      => $request->expiry_days,
                 'description'      => $request->description,
@@ -104,6 +111,7 @@ class DocumentController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Display the specified resource.
@@ -152,7 +160,7 @@ class DocumentController extends Controller
             $request->validate([
                 'name'             => 'required|string|max:255|unique:documents,name,' . $id,
                 'entiti_id'        => 'nullable|integer',
-                'work_flow_steps'  => 'nullable|array',
+                'workflow_id'      => 'required|integer|exists:workflows,id', // ✅ incoming from UI
                 'roles'            => 'nullable|array',
                 'file_formats'     => 'nullable|array',
                 'categories'       => 'nullable|array',
@@ -164,13 +172,28 @@ class DocumentController extends Controller
                 'is_enable'        => 'required|integer',
             ]);
 
+            // ✅ Fetch associated workflow steps based on given workflow_id
+            $steps = DB::table('workflow_steps')
+                ->where('workflow_id', $request->workflow_id)
+                ->pluck('id')
+                ->toArray();
+
+            if (empty($steps)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No steps found for the selected workflow'
+                ], 401);
+            }
+
+            // ✅ Update document
             $document->update([
                 'name'             => $request->name,
                 'entiti_id'        => $request->entiti_id,
-                'work_flow_steps'  => $request->has('work_flow_steps') ? implode(',', $request->work_flow_steps) : $document->work_flow_steps,
-                'roles'            => $request->has('roles') ? implode(',', $request->roles) : $document->roles,
-                'file_formats'     => $request->has('file_formats') ? implode(',', $request->file_formats) : $document->file_formats,
-                'categories'       => $request->has('categories') ? implode(',', $request->categories) : $document->categories,
+                'workflow_id'      => $request->workflow_id,
+                'work_flow_steps'  => implode(',', $steps), // ✅ auto-updated steps
+                'roles'            => $request->roles ? implode(',', $request->roles) : null,
+                'file_formats'     => $request->file_formats ? implode(',', $request->file_formats) : null,
+                'categories'       => $request->categories ? implode(',', $request->categories) : null,
                 'max_count'        => $request->max_count,
                 'expiry_days'      => $request->expiry_days,
                 'description'      => $request->description,
@@ -198,6 +221,7 @@ class DocumentController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Remove the specified resource from storage.

@@ -50,7 +50,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('roles', RoleController::class);
         Route::post('roles/assign', [RoleController::class, 'assignRole']);
         Route::post('roles/remove', [RoleController::class, 'removeRole']);
-
+        Route::get('roles/{id}/users', [RoleController::class, 'getUsersByRole']);
 
 
 
@@ -64,7 +64,6 @@ Route::middleware('auth:api,entiti-api')->group(function () {
             Route::post('permissions/assign', [RolePermissionController::class, 'assignPermissions']);
             Route::post('permissions/remove', [RolePermissionController::class, 'removePermission']);
             Route::get('{role_id}/permissions', [RolePermissionController::class, 'getRolePermissions']);
-
             Route::post('permissions/manage', [RolePermissionController::class, 'manageRolePermissions']);
         });
 
@@ -103,7 +102,8 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('request_type', RequestTypeController::class);
         Route::apiResource('workflow', WorkFlowController::class);
         Route::apiResource('workflowsteps', WorkFlowStepsController::class);
-        Route::post('/workflowsteps/reorder', [WorkFlowStepsController::class, 'reorder']);
+        Route::get('workflow/{id}/steps', action: [WorkFlowStepsController::class, 'getStepByWorkflow']);
+        Route::post('workflowsteps/reorder', [WorkFlowStepsController::class, 'reorder']);
         Route::apiResource('workflow_role/assign', WorkFlow_RoleAssignController::class);
 
 

@@ -272,4 +272,15 @@ class WorkFlowStepsController extends Controller
             ], 500);
         }
     }
+
+
+    public function getStepByWorkflow($id)
+    {
+        $steps = WorkflowStep::where('workflow_id', $id)->get();
+
+        return response()->json([
+            'status' => 'success',
+            'steps' => $steps
+        ]);
+    }
 }

@@ -79,7 +79,6 @@ class WorkFlow_RoleAssignController extends Controller
                     'users' => $eligibleUsers
                 ]
             ], 200);
-
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
@@ -130,7 +129,6 @@ class WorkFlow_RoleAssignController extends Controller
                     'users' => $eligibleUsers
                 ]
             ], 200);
-
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
@@ -141,6 +139,31 @@ class WorkFlow_RoleAssignController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update workflow role assignment.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function destroy(string $id)
+    {
+        try {
+            $assignment = WorkflowRoleAssign::findOrFail($id);
+            $assignment->delete();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Workflow role assignment deleted successfully.'
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Workflow role assignment not found.',
+                'error' => $e->getMessage()
+            ], 404);
+        } catch (QueryException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to delete workflow role assignment.',
                 'error' => $e->getMessage()
             ], 500);
         }

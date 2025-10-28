@@ -12,6 +12,7 @@ class Document extends Model
         'name',
         'entiti_id',
         'work_flow_steps',
+        'workflow_id',
         'roles',
         'file_formats',
         'categories',

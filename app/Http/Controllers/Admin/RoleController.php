@@ -149,4 +149,34 @@ class RoleController extends Controller
             'message' => 'Role removed successfully',
         ]);
     }
+
+
+    public function getUsersByRole($role_id)
+    {
+        try {
+            // Check if role exists
+            $role = Role::find($role_id);
+            if (!$role) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Role not found'
+                ], 404);
+            }
+
+            // Get all users assigned to this role
+            $users = $role->users()->select('users.id', 'users.name', 'users.email')->get();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Users fetched successfully',
+                'data' => $users
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
