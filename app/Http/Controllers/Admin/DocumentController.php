@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Document;
 use Illuminate\Http\Request;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -26,6 +25,30 @@ class DocumentController extends Controller
                 ], 401);
             }
 
+            // Map IDs to names
+            $documents->transform(function ($doc) {
+                // Convert comma-separated IDs into arrays
+                $categoryIds = $doc->categories ? explode(',', $doc->categories) : [];
+                $fileFormatIds = $doc->file_formats ? explode(',', $doc->file_formats) : [];
+
+                // Fetch related names from DB
+                $categoryNames = DB::table('categories')
+                    ->whereIn('id', $categoryIds)
+                    ->pluck('name')
+                    ->toArray();
+
+                $fileFormatNames = DB::table('file_formats')
+                    ->whereIn('id', $fileFormatIds)
+                    ->pluck('name')
+                    ->toArray();
+
+                // Replace IDs with readable names
+                $doc->categories = implode(', ', $categoryNames);
+                $doc->file_formats = implode(', ', $fileFormatNames);
+
+                return $doc;
+            });
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'All documents retrieved successfully',
@@ -40,17 +63,17 @@ class DocumentController extends Controller
         }
     }
 
+
     /**
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
     {
         try {
-
             $request->validate([
                 'name'             => 'required|string|max:255',
                 'entiti_id'        => 'nullable|integer',
-                'workflow_id'      => 'required|integer|exists:workflows,id', // ✅ Send from frontend
+                'workflow_id'      => 'required|integer|exists:work_flows,id',
                 'roles'            => 'nullable|array',
                 'file_formats'     => 'nullable|array',
                 'categories'       => 'nullable|array',
@@ -62,7 +85,7 @@ class DocumentController extends Controller
                 'is_enable'        => 'required|integer',
             ]);
 
-            // ✅ Fetch workflow steps according to the workflow_id received
+            // Fetch workflow steps
             $steps = DB::table('workflow_steps')
                 ->where('workflow_id', $request->workflow_id)
                 ->pluck('id')
@@ -71,11 +94,11 @@ class DocumentController extends Controller
             if (empty($steps)) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'No steps found for the selected workflow'
-                ], 401);
+                    'message' => 'No steps found for the selected workflow',
+                ], 404);
             }
 
-            // ✅ Create document
+            // Create document
             $document = Document::create([
                 'name'             => $request->name,
                 'entiti_id'        => $request->entiti_id,
@@ -95,23 +118,22 @@ class DocumentController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Document created successfully',
-                'data' => $document
+                'data' => $document,
             ], 201);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 401);
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to create document',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     /**
      * Display the specified resource.
@@ -124,20 +146,26 @@ class DocumentController extends Controller
             if (!$document) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Document not found'
-                ], 401);
+                    'message' => 'Document not found',
+                ], 404);
             }
+
+            // Convert comma-separated fields to arrays
+            $document->work_flow_steps = $document->work_flow_steps ? explode(',', $document->work_flow_steps) : [];
+            $document->roles = $document->roles ? explode(',', $document->roles) : [];
+            $document->file_formats = $document->file_formats ? explode(',', $document->file_formats) : [];
+            $document->categories = $document->categories ? explode(',', $document->categories) : [];
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Document retrieved successfully',
-                'data' => $document
+                'data' => $document,
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to fetch document',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -153,14 +181,14 @@ class DocumentController extends Controller
             if (!$document) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Document not found'
-                ], 401);
+                    'message' => 'Document not found',
+                ], 404);
             }
 
             $request->validate([
                 'name'             => 'required|string|max:255|unique:documents,name,' . $id,
                 'entiti_id'        => 'nullable|integer',
-                'workflow_id'      => 'required|integer|exists:workflows,id', // ✅ incoming from UI
+                'workflow_id'      => 'required|integer|exists:work_flows,id',
                 'roles'            => 'nullable|array',
                 'file_formats'     => 'nullable|array',
                 'categories'       => 'nullable|array',
@@ -172,7 +200,6 @@ class DocumentController extends Controller
                 'is_enable'        => 'required|integer',
             ]);
 
-            // ✅ Fetch associated workflow steps based on given workflow_id
             $steps = DB::table('workflow_steps')
                 ->where('workflow_id', $request->workflow_id)
                 ->pluck('id')
@@ -181,16 +208,15 @@ class DocumentController extends Controller
             if (empty($steps)) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'No steps found for the selected workflow'
-                ], 401);
+                    'message' => 'No steps found for the selected workflow',
+                ], 404);
             }
 
-            // ✅ Update document
             $document->update([
                 'name'             => $request->name,
                 'entiti_id'        => $request->entiti_id,
                 'workflow_id'      => $request->workflow_id,
-                'work_flow_steps'  => implode(',', $steps), // ✅ auto-updated steps
+                'work_flow_steps'  => implode(',', $steps),
                 'roles'            => $request->roles ? implode(',', $request->roles) : null,
                 'file_formats'     => $request->file_formats ? implode(',', $request->file_formats) : null,
                 'categories'       => $request->categories ? implode(',', $request->categories) : null,
@@ -205,23 +231,22 @@ class DocumentController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Document updated successfully',
-                'data' => $document
+                'data' => $document,
             ], 200);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 401);
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update document',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     /**
      * Remove the specified resource from storage.
@@ -234,21 +259,21 @@ class DocumentController extends Controller
             if (!$document) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Document not found'
-                ], 401);
+                    'message' => 'Document not found',
+                ], 404);
             }
 
             $document->delete();
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Document deleted successfully'
+                'message' => 'Document deleted successfully',
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete document',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
