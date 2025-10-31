@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Document;
+use App\Models\FileFormat;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -74,9 +75,9 @@ class DocumentController extends Controller
                 'name'             => 'required|string|max:255',
                 'entiti_id'        => 'nullable|integer',
                 'workflow_id'      => 'required|integer|exists:work_flows,id',
-                'roles'            => 'nullable|array',
-                'file_formats'     => 'nullable|array',
-                'categories'       => 'nullable|array',
+                'roles'            => 'nullable',
+                'file_formats'     => 'nullable',
+                'categories'       => 'nullable',
                 'max_count'        => 'required|integer',
                 'expiry_days'      => 'required|integer',
                 'description'      => 'required|string',
@@ -84,6 +85,19 @@ class DocumentController extends Controller
                 'is_mandatory'     => 'required|integer',
                 'is_enable'        => 'required|integer',
             ]);
+
+            // Normalize stringified values (from frontend)
+            $roles = is_array($request->roles)
+                ? $request->roles
+                : (is_string($request->roles) ? array_filter(explode(',', $request->roles)) : []);
+
+            $fileFormatIds = [];
+            if (!empty($request->file_formats)) {
+                $fileFormatIds = FileFormat::whereIn('name', $request->file_formats)->pluck('id')->toArray();
+            }
+            $categories = is_array($request->categories)
+                ? $request->categories
+                : (is_string($request->categories) ? array_filter(explode(',', $request->categories)) : []);
 
             // Fetch workflow steps
             $steps = DB::table('workflow_steps')
@@ -98,15 +112,14 @@ class DocumentController extends Controller
                 ], 404);
             }
 
-            // Create document
             $document = Document::create([
                 'name'             => $request->name,
                 'entiti_id'        => $request->entiti_id,
                 'workflow_id'      => $request->workflow_id,
                 'work_flow_steps'  => implode(',', $steps),
-                'roles'            => $request->roles ? implode(',', $request->roles) : null,
-                'file_formats'     => $request->file_formats ? implode(',', $request->file_formats) : null,
-                'categories'       => $request->categories ? implode(',', $request->categories) : null,
+                'roles'            => implode(',', $roles),
+                'file_formats' => $fileFormatIds ? implode(',', $fileFormatIds) : null,
+                'categories'       => implode(',', $categories),
                 'max_count'        => $request->max_count,
                 'expiry_days'      => $request->expiry_days,
                 'description'      => $request->description,
@@ -135,9 +148,6 @@ class DocumentController extends Controller
         }
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show($id)
     {
         try {
@@ -170,9 +180,6 @@ class DocumentController extends Controller
         }
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, $id)
     {
         try {
@@ -189,9 +196,9 @@ class DocumentController extends Controller
                 'name'             => 'required|string|max:255|unique:documents,name,' . $id,
                 'entiti_id'        => 'nullable|integer',
                 'workflow_id'      => 'required|integer|exists:work_flows,id',
-                'roles'            => 'nullable|array',
-                'file_formats'     => 'nullable|array',
-                'categories'       => 'nullable|array',
+                'roles'            => 'nullable',
+                'file_formats'     => 'nullable',
+                'categories'       => 'nullable',
                 'max_count'        => 'required|integer',
                 'expiry_days'      => 'required|integer',
                 'description'      => 'required|string',
@@ -199,6 +206,18 @@ class DocumentController extends Controller
                 'is_mandatory'     => 'required|integer',
                 'is_enable'        => 'required|integer',
             ]);
+
+            $roles = is_array($request->roles)
+                ? $request->roles
+                : (is_string($request->roles) ? array_filter(explode(',', $request->roles)) : []);
+
+            $fileFormatIds = [];
+            if (!empty($request->file_formats)) {
+                $fileFormatIds = FileFormat::whereIn('name', $request->file_formats)->pluck('id')->toArray();
+            }
+            $categories = is_array($request->categories)
+                ? $request->categories
+                : (is_string($request->categories) ? array_filter(explode(',', $request->categories)) : []);
 
             $steps = DB::table('workflow_steps')
                 ->where('workflow_id', $request->workflow_id)
@@ -217,9 +236,9 @@ class DocumentController extends Controller
                 'entiti_id'        => $request->entiti_id,
                 'workflow_id'      => $request->workflow_id,
                 'work_flow_steps'  => implode(',', $steps),
-                'roles'            => $request->roles ? implode(',', $request->roles) : null,
-                'file_formats'     => $request->file_formats ? implode(',', $request->file_formats) : null,
-                'categories'       => $request->categories ? implode(',', $request->categories) : null,
+                'roles'            => implode(',', $roles),
+                'file_formats' => $fileFormatIds ? implode(',', $fileFormatIds) : null,
+                'categories'       => implode(',', $categories),
                 'max_count'        => $request->max_count,
                 'expiry_days'      => $request->expiry_days,
                 'description'      => $request->description,
@@ -247,6 +266,7 @@ class DocumentController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Remove the specified resource from storage.
