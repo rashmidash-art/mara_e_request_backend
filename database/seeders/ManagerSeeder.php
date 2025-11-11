@@ -34,6 +34,6 @@ class ManagerSeeder extends Seeder
         ];
 
         // Insert into database
-        DB::table('workflow_types')->insert($data);
+        DB::table('managers')->insert($data);
     }
 }
