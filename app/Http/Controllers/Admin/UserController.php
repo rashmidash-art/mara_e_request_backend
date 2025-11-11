@@ -41,12 +41,12 @@ class UserController extends Controller
     public function store(Request $request)
     {
         try {
-            // ✅ Fix validation keys
+            //  Fix validation keys
             $request->validate([
                 'name' => 'required|string|max:255',
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:6',
-                'employee_id' => 'required|string|unique:users,employee_id', // ✅ no space
+                'employee_id' => 'required|string|unique:users,employee_id', //  no space
                 'entiti_id' => 'required|integer|exists:entitis,id',
                 'department_id' => 'required|integer|exists:departments,id',
                 'loa' => 'required|numeric|min:0',
@@ -88,10 +88,10 @@ class UserController extends Controller
                 'status' => $request->status,
             ]);
 
-            // ✅ Upload signature if present
+            //  Upload signature if present
             if ($request->hasFile('signature')) {
                 $file = $request->file('signature');
-                $extension = $file->getClientOriginalExtension(); // ✅ fixed
+                $extension = $file->getClientOriginalExtension(); //  fixed
                 $filename = 'uid_' . $user->id . '_signature.' . $extension;
 
                 $path = $file->storeAs('upload/signature', $filename, 'public');
@@ -292,7 +292,7 @@ class UserController extends Controller
                 'entiti_id' => 'sometimes|required|integer|exists:entitis,id',
                 'department_id' => 'sometimes|required|integer|exists:departments,id',
                 'loa' => 'sometimes|required|numeric|min:0',
-                'signature' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048', // ✅ file validation
+                'signature' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048', //  file validation
                 'status' => ['sometimes', 'required', Rule::in(['Active', 'Inactive', 'Away'])],
                 'roles' => 'sometimes|array',
             ]);
@@ -340,7 +340,7 @@ class UserController extends Controller
                 $data['password'] = Hash::make($request->password);
             }
 
-            // ✅ Handle file upload
+            //  Handle file upload
             if ($request->hasFile('signature')) {
                 $file = $request->file('signature');
                 $extension = $file->getClientOriginalExtension();

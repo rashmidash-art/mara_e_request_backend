@@ -42,7 +42,7 @@ class RequestTypeController extends Controller
         try {
             $request->validate(
                 [
-                    'categori_id' => 'required|integer|exists:entitis,id',
+                    'categori_id' => 'required|integer|exists:categories,id',
                     'request_code' => 'required|string|max:255|unique:request_types,request_code',
                     'name'          => 'required|string|max:255|unique:request_types,name',
                     'descripton' => 'nullable|string',
@@ -125,9 +125,9 @@ class RequestTypeController extends Controller
                 ], 404);
             }
 
-            // ✅ Validation
+            //  Validation
             $request->validate([
-                'categori_id'   => 'sometimes|required|integer|exists:entitis,id',
+                'categori_id'   => 'sometimes|required|integer|exists:categories,id',
                 'request_code'  => 'sometimes|required|string|max:255|unique:request_types,request_code,' . $requestType->id,
                 'name'          => 'sometimes|required|string|max:255|unique:request_types,name,' . $requestType->id,
                 'descripton'   => 'nullable|string',
@@ -141,7 +141,7 @@ class RequestTypeController extends Controller
                 'request_code.required' => 'Request code is required.',
             ]);
 
-            // ✅ Update record
+            //  Update record
             $requestType->update($request->only('categori_id', 'request_code', 'name', 'descripton', 'status'));
 
             return response()->json([

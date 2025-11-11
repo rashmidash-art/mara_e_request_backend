@@ -77,18 +77,18 @@ class SupplierController extends Controller
             'compliance' => 'nullable|string|max:255',
         ]);
 
-        // ✅ File uploads: save and store CSV of paths
+        // File uploads: save and store CSV of paths
         foreach (['regi_certificates', 'tax_certificates', 'insurance_certificates'] as $field) {
             if ($request->hasFile($field)) {
                 $filenames = collect($request->file($field))
                     ->map(function ($file) use ($field) {
-                        $filename = $file->getClientOriginalName(); // ✅ Original name only
+                        $filename = $file->getClientOriginalName(); //  Original name only
                         $file->storeAs("upload/{$field}", $filename, 'public');
                         return $filename;
                     })
                     ->toArray();
 
-                $validated[$field] = implode(',', $filenames); // ✅ Store only filenames
+                $validated[$field] = implode(',', $filenames); //  Store only filenames
             }
         }
         try {
@@ -112,7 +112,7 @@ class SupplierController extends Controller
     /**
      * Display a specific supplier.
      */
-    public function show(string $id)
+    public function show($id)
     {
         try {
             $supplier = Supplier::findOrFail($id);
