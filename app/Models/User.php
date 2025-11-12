@@ -92,5 +92,13 @@ class User extends Authenticatable
     }
 
 
+    public function department()
+    {
+        return $this->belongsTo(Department::class, 'department_id');
+    }
 
+    public function entity()
+    {
+        return $this->belongsTo(Entiti::class, 'entiti_id');
+    }
 }

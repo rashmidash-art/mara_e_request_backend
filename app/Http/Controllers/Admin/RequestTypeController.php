@@ -61,7 +61,7 @@ class RequestTypeController extends Controller
                 'request_code' => $request->request_code,
                 'name' => $request->name,
                 'descripton' => $request->descripton,
-                'status' => $request->satus,
+                'status' => $request->status,
             ]);
 
             return response()->json([
