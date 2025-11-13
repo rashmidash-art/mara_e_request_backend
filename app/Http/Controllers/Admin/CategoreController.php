@@ -146,4 +146,5 @@ class CategoreController extends Controller
             ], 500);
         }
     }
+
 }

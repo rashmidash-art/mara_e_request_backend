@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use App\Models\Document;
 use App\Models\FileFormat;
 use Illuminate\Http\Request;
@@ -296,5 +297,56 @@ class DocumentController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+
+    // public function getDocumentsByCategore($id)
+    // {
+    //     $documents = Document::whereRaw('FIND_IN_SET(?, categories)', [$id])->get();
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'data' => $documents
+    //     ]);
+    // }
+
+
+    public function getDocumentsByCategore($id)
+    {
+        $documents = Document::whereRaw('FIND_IN_SET(?, categories)', [$id])->get();
+
+        $documents = $documents->map(function ($doc) {
+            // Convert comma-separated IDs into arrays
+            $fileFormatIds = explode(',', $doc->file_formats);
+            $categoryIds = explode(',', $doc->categories);
+
+            // Fetch related names
+            $fileFormats = FileFormat::whereIn('id', $fileFormatIds)->pluck('name')->toArray();
+            $categories = Category::whereIn('id', $categoryIds)->pluck('name')->toArray();
+
+            return [
+                'id' => $doc->id,
+                'name' => $doc->name,
+                'entiti_id' => $doc->entiti_id,
+                'workflow_id' => $doc->workflow_id,
+                'work_flow_steps' => $doc->work_flow_steps,
+                'roles' => $doc->roles,
+                'file_formats' => $fileFormats,
+                'categories' => $categories,
+                'max_count' => $doc->max_count,
+                'expiry_days' => $doc->expiry_days,
+                'description' => $doc->description,
+                'status' => $doc->status,
+                'is_mandatory' => $doc->is_mandatory,
+                'is_enable' => $doc->is_enable,
+                'created_at' => $doc->created_at,
+                'updated_at' => $doc->updated_at,
+            ];
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $documents
+        ]);
     }
 }

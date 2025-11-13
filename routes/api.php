@@ -111,6 +111,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('supplier', SupplierController::class);
         Route::apiResource('fileformat', FileFormatController::class);
         Route::apiResource('document', DocumentController::class);
+        Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
     });
 
 

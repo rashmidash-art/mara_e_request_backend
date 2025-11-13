@@ -124,6 +124,7 @@ class EntitiesController extends Controller
 
         return response()->json([
             'status' => 'success',
+            'data' => $users,
             'users' => $users
         ]);
     }
