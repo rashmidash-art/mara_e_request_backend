@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\WorkFlowController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetContrller;
 use App\Http\Controllers\Admin\DeprtmentController;
+use App\Http\Controllers\Admin\RequestController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WorkFlowStepsController;
 use App\Http\Controllers\Admin\WorkFlowTypeController;
@@ -108,10 +109,12 @@ Route::middleware('auth:api,entiti-api')->group(function () {
 
 
         // routes/api.php
-        Route::apiResource('supplier', SupplierController::class);
+        Route::apiResource('supplier', controller: SupplierController::class);
         Route::apiResource('fileformat', FileFormatController::class);
         Route::apiResource('document', DocumentController::class);
         Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
+
+        Route::apiResource('request', controller: RequestController::class);
     });
 
 

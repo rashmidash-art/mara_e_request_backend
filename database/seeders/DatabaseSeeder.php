@@ -20,5 +20,6 @@ class DatabaseSeeder extends Seeder
         // $this->call(BudgetSeeder::class);
         // $this->call(WorkflowTypeSeeder::class);
         // $this->call(ManagerSeeder::class);
+        $this->call(RequestSeeder::class);
     }
 }
