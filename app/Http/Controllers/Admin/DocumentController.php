@@ -9,6 +9,7 @@ use App\Models\FileFormat;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Log;
 
 class DocumentController extends Controller
 {
@@ -17,23 +18,26 @@ class DocumentController extends Controller
      */
     public function index()
     {
+
+        Log::info('DocumentController@index called');
+
         try {
             $documents = Document::all();
 
             if ($documents->isEmpty()) {
+                Log::warning('No documents found in index()');
+
                 return response()->json([
                     'status' => 'error',
                     'message' => 'No documents found'
                 ], 401);
             }
 
-            // Map IDs to names
             $documents->transform(function ($doc) {
                 // Convert comma-separated IDs into arrays
                 $categoryIds = $doc->categories ? explode(',', $doc->categories) : [];
                 $fileFormatIds = $doc->file_formats ? explode(',', $doc->file_formats) : [];
 
-                // Fetch related names from DB
                 $categoryNames = DB::table('categories')
                     ->whereIn('id', $categoryIds)
                     ->pluck('name')
@@ -44,12 +48,13 @@ class DocumentController extends Controller
                     ->pluck('name')
                     ->toArray();
 
-                // Replace IDs with readable names
                 $doc->categories = implode(', ', $categoryNames);
                 $doc->file_formats = implode(', ', $fileFormatNames);
 
                 return $doc;
             });
+            Log::info('Documents retrieved successfully');
+
 
             return response()->json([
                 'status' => 'success',
@@ -57,6 +62,9 @@ class DocumentController extends Controller
                 'data' => $documents
             ], 200);
         } catch (\Exception $e) {
+            Log::error('Error in index(): ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to fetch documents',
@@ -71,6 +79,8 @@ class DocumentController extends Controller
      */
     public function store(Request $request)
     {
+        Log::info('DocumentController@store called', $request->all());
+
         try {
             $request->validate([
                 'name'             => 'required|string|max:255',
@@ -86,6 +96,9 @@ class DocumentController extends Controller
                 'is_mandatory'     => 'required|integer',
                 'is_enable'        => 'required|integer',
             ]);
+
+            Log::info('Validation passed for store()');
+
 
             // Normalize stringified values (from frontend)
             $roles = is_array($request->roles)
@@ -128,6 +141,7 @@ class DocumentController extends Controller
                 'is_mandatory'     => $request->is_mandatory,
                 'is_enable'        => $request->is_enable,
             ]);
+            Log::info('Document created successfully', ['document_id' => $document->id]);
 
             return response()->json([
                 'status' => 'success',
@@ -135,12 +149,17 @@ class DocumentController extends Controller
                 'data' => $document,
             ], 201);
         } catch (ValidationException $e) {
+            Log::warning('Validation failed in store()', $e->errors());
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
                 'errors' => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
+            Log::error('Error in store(): ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to create document',
@@ -151,10 +170,14 @@ class DocumentController extends Controller
 
     public function show($id)
     {
+        Log::info("DocumentController@show called with ID: $id");
+
         try {
             $document = Document::find($id);
 
             if (!$document) {
+                Log::warning("Document not found: ID $id");
+
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Document not found',
@@ -166,6 +189,7 @@ class DocumentController extends Controller
             $document->roles = $document->roles ? explode(',', $document->roles) : [];
             $document->file_formats = $document->file_formats ? explode(',', $document->file_formats) : [];
             $document->categories = $document->categories ? explode(',', $document->categories) : [];
+            Log::info("Document retrieved successfully", ['id' => $id]);
 
             return response()->json([
                 'status' => 'success',
@@ -173,6 +197,9 @@ class DocumentController extends Controller
                 'data' => $document,
             ], 200);
         } catch (\Exception $e) {
+            Log::error("Error in show($id): " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to fetch document',
@@ -183,10 +210,14 @@ class DocumentController extends Controller
 
     public function update(Request $request, $id)
     {
+        Log::info("DocumentController@update called", ['id' => $id, 'data' => $request->all()]);
+
         try {
             $document = Document::find($id);
 
             if (!$document) {
+                Log::warning("Document not found for update: ID $id");
+
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Document not found',
@@ -207,6 +238,7 @@ class DocumentController extends Controller
                 'is_mandatory'     => 'required|integer',
                 'is_enable'        => 'required|integer',
             ]);
+            Log::info("Validation passed for update($id)");
 
             $roles = is_array($request->roles)
                 ? $request->roles
@@ -247,6 +279,7 @@ class DocumentController extends Controller
                 'is_mandatory'     => $request->is_mandatory,
                 'is_enable'        => $request->is_enable,
             ]);
+            Log::info("Document updated successfully", ['id' => $id]);
 
             return response()->json([
                 'status' => 'success',
@@ -254,12 +287,17 @@ class DocumentController extends Controller
                 'data' => $document,
             ], 200);
         } catch (ValidationException $e) {
+            Log::warning("Validation failed in update($id)", $e->errors());
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Validation failed',
                 'errors' => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
+            Log::error("Error in update($id): " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update document',
@@ -274,10 +312,15 @@ class DocumentController extends Controller
      */
     public function destroy($id)
     {
+        Log::info("DocumentController@destroy called with ID: $id");
+
         try {
             $document = Document::find($id);
 
             if (!$document) {
+
+                Log::warning("Document not found for deletion: ID $id");
+
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Document not found',
@@ -285,12 +328,16 @@ class DocumentController extends Controller
             }
 
             $document->delete();
+            Log::info("Document deleted successfully", ['id' => $id]);
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Document deleted successfully',
             ], 200);
         } catch (\Exception $e) {
+            Log::error("Error in destroy($id): " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete document',
@@ -313,6 +360,8 @@ class DocumentController extends Controller
 
     public function getDocumentsByCategore($id)
     {
+        Log::info("DocumentController@getDocumentsByCategore called with category: $id");
+
         $documents = Document::whereRaw('FIND_IN_SET(?, categories)', [$id])->get();
 
         $documents = $documents->map(function ($doc) {
@@ -343,6 +392,8 @@ class DocumentController extends Controller
                 'updated_at' => $doc->updated_at,
             ];
         });
+        Log::info("Documents retrieved for category: $id");
+
 
         return response()->json([
             'status' => 'success',
