@@ -95,6 +95,7 @@ class DocumentController extends Controller
                 'status'           => 'required|string|max:255',
                 'is_mandatory'     => 'required|integer',
                 'is_enable'        => 'required|integer',
+                'work_flow_steps' => 'nullable',
             ]);
 
             Log::info('Validation passed for store()');
@@ -217,13 +218,13 @@ class DocumentController extends Controller
 
             if (!$document) {
                 Log::warning("Document not found for update: ID $id");
-
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Document not found',
                 ], 404);
             }
 
+            // VALIDATION
             $request->validate([
                 'name'             => 'required|string|max:255|unique:documents,name,' . $id,
                 'entiti_id'        => 'nullable|integer',
@@ -238,20 +239,24 @@ class DocumentController extends Controller
                 'is_mandatory'     => 'required|integer',
                 'is_enable'        => 'required|integer',
             ]);
+
             Log::info("Validation passed for update($id)");
 
-            $roles = is_array($request->roles)
-                ? $request->roles
-                : (is_string($request->roles) ? array_filter(explode(',', $request->roles)) : []);
+            // ---------- NORMALIZATION ----------
+            $normalize = fn($val) =>
+            is_array($val) ? $val : (is_string($val) ? array_filter(explode(',', $val)) : []);
 
+            $roles = $normalize($request->roles);
+            $categories = $normalize($request->categories);
+
+            // file formats are sent as names → convert to IDs
             $fileFormatIds = [];
             if (!empty($request->file_formats)) {
-                $fileFormatIds = FileFormat::whereIn('name', $request->file_formats)->pluck('id')->toArray();
+                $formats = $normalize($request->file_formats);
+                $fileFormatIds = FileFormat::whereIn('name', $formats)->pluck('id')->toArray();
             }
-            $categories = is_array($request->categories)
-                ? $request->categories
-                : (is_string($request->categories) ? array_filter(explode(',', $request->categories)) : []);
 
+            // Get workflow steps
             $steps = DB::table('workflow_steps')
                 ->where('workflow_id', $request->workflow_id)
                 ->pluck('id')
@@ -264,13 +269,14 @@ class DocumentController extends Controller
                 ], 404);
             }
 
+            // ---------- UPDATE ----------
             $document->update([
                 'name'             => $request->name,
                 'entiti_id'        => $request->entiti_id,
                 'workflow_id'      => $request->workflow_id,
                 'work_flow_steps'  => implode(',', $steps),
                 'roles'            => implode(',', $roles),
-                'file_formats' => $fileFormatIds ? implode(',', $fileFormatIds) : null,
+                'file_formats'     => $fileFormatIds ? implode(',', $fileFormatIds) : null,
                 'categories'       => implode(',', $categories),
                 'max_count'        => $request->max_count,
                 'expiry_days'      => $request->expiry_days,
@@ -279,6 +285,7 @@ class DocumentController extends Controller
                 'is_mandatory'     => $request->is_mandatory,
                 'is_enable'        => $request->is_enable,
             ]);
+
             Log::info("Document updated successfully", ['id' => $id]);
 
             return response()->json([
@@ -298,6 +305,7 @@ class DocumentController extends Controller
             Log::error("Error in update($id): " . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
             ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update document',
@@ -305,6 +313,7 @@ class DocumentController extends Controller
             ], 500);
         }
     }
+
 
 
     /**
