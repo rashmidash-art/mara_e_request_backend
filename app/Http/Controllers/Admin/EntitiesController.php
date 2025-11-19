@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Department;
 use App\Models\Entiti;
 use App\Models\User;
+use App\Models\WorkFlow;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -20,6 +22,14 @@ class EntitiesController extends Controller
     //     $this->middleware(['auth', 'role:admin']);
     // }
 
+
+    public function itself(Request $request)
+    {
+        return response()->json([
+            'status' => 'success',
+            'data' => $request->user(),
+        ]);
+    }
     public function index()
     {
         $entities = Entiti::all();
@@ -106,15 +116,62 @@ class EntitiesController extends Controller
     /**
      * Remove the specified resource from storage.
      */
+    // public function destroy($id)
+    // {
+    //     $entity = Entiti::findOrFail($id);
+    //     $entity->delete();
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'message' => 'Entity deleted successfully',
+    //     ]);
+    // }
+
+
     public function destroy($id)
     {
-        $entity = Entiti::findOrFail($id);
-        $entity->delete();
+        try {
+            // Find the entity by ID
+            $entity = Entiti::findOrFail($id);
+            $relatedRecords = $this->checkForRelatedRecords($id);
+            if ($relatedRecords) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Cannot delete the entity because there are related records in users, departments, or workflows.',
+                ], 400);
+            }
+            $entity->delete();
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Entity deleted successfully',
-        ]);
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Entity deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'An error occurred while deleting the entity: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Check if there are any related records in users, departments, or workflows.
+     *
+     * @param int $entityId
+     * @return bool
+     */
+    private function checkForRelatedRecords($entityId)
+    {
+        if (User::where('entiti_id', $entityId)->exists()) {
+            return true;
+        }
+        if (Department::where('entiti_id', $entityId)->exists()) {
+            return true;
+        }
+        if (WorkFlow::where('entiti_id', $entityId)->exists()) {
+            return true;
+        }
+        return false;
     }
 
 

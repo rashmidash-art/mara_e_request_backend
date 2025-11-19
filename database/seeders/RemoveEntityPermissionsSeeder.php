@@ -14,6 +14,6 @@ class RemoveEntityPermissionsSeeder extends Seeder
     public function run(): void
     {
         Permission::where('name', 'like', 'entities.%')->delete();
-        echo "✅ All entity permissions removed!\n";
+        echo "All entity permissions removed!\n";
     }
 }

@@ -61,8 +61,8 @@ class SupplierController extends Controller
             'phone' => 'required|string|max:20',
             'contact_persion_name' => 'required|string|max:255',
             'address' => 'required|string',
-            'tax_id' => 'required|string|max:100',
-            'regi_no' => 'required|string|max:100',
+            'tax_id' => 'nullable|string|max:100',
+            'regi_no' => 'nullable|string|max:100',
             'entiti_id' => 'required|string|max:255',
             // CSV strings
             'categories' => 'required|string|max:255',

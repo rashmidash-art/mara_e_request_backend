@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\BudgetController;
 use App\Http\Controllers\Admin\CategoreController;
+use App\Http\Controllers\Admin\CreateRequestController;
 use App\Http\Controllers\Admin\DocumentController;
 use App\Http\Controllers\Admin\EntitiesController;
 use App\Http\Controllers\Admin\FileFormatController;
@@ -36,25 +37,24 @@ Route::middleware('auth:api,entiti-api')->group(function () {
     Route::get('admin/user', function (Request $request) {
         return response()->json($request->user());
     });
-
-
     // -----------------------------
     // Roles Management (Dynamic CRUD)
     // Only accessible by Admin
     // -----------------------------
 
+    Route::middleware(['auth:entiti-api'])->group(function () {
+        Route::get('entity/itself', [EntitiesController::class, 'itself']);
+    });
+    Route::middleware(['auth:api,entiti-api', 'permission'])->group(function () {
+        Route::get('budgets', [BudgetController::class, 'index']);
+        Route::apiResource('entities', EntitiesController::class);
+    });
 
-    Route::get('budgets', [BudgetController::class, 'index']);
-
-
-    Route::middleware(['auth:api', 'permission'])->group(function () {
+    Route::middleware(['auth:api,entiti-api', 'permission'])->group(function () {
         Route::apiResource('roles', RoleController::class);
         Route::post('roles/assign', [RoleController::class, 'assignRole']);
         Route::post('roles/remove', [RoleController::class, 'removeRole']);
         Route::get('roles/{id}/users', [RoleController::class, 'getUsersByRole']);
-
-
-
         // -----------------------------
         // 🔒 Role Permission Management
         // -----------------------------
@@ -67,38 +67,27 @@ Route::middleware('auth:api,entiti-api')->group(function () {
             Route::get('{role_id}/permissions', [RolePermissionController::class, 'getRolePermissions']);
             Route::post('permissions/manage', [RolePermissionController::class, 'manageRolePermissions']);
         });
-
-
         // Route::prefix('budgets')->group(function () {
         //     Route::get('/', [BudgetController::class, 'index']); // View all entity & department budgets
         //     Route::post('/allocate', [BudgetController::class, 'allocate']); // Allocate amount to department
         // });
-
-
         Route::post('budgets/allocate', [BudgetController::class, 'allocate']); // Admin only
-
-
         // -----------------------------
         // Master Modules
         // -----------------------------
         // For Entitis
-        Route::apiResource('entities', EntitiesController::class);
+        // Route::apiResource('entities', EntitiesController::class);
         Route::get('entities/{id}/users', action: [EntitiesController::class, 'getUserbyEntiti']);
-
-
         Route::apiResource('work-flows', WorkFlowTypeController::class);
         Route::apiResource('managers', ManagerController::class);
-
         // For Department
         Route::apiResource('department', DeprtmentController::class);
         Route::get('entities/{id}/departments', [DeprtmentController::class, 'getByEntity']);
         Route::get('department/{id}/users', action: [DeprtmentController::class, 'getUserbyDepartment']);
-
         // For Users
         Route::get('users/search', [UserController::class, 'search']);
         Route::get('users/next-employee-id', [UserController::class, 'nextEmployeeId']);
         Route::apiResource('users', UserController::class);
-
         Route::apiResource('categore', CategoreController::class);
         Route::apiResource('request_type', RequestTypeController::class);
         Route::apiResource('workflow', WorkFlowController::class);
@@ -106,15 +95,12 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::get('workflow/{id}/steps', action: [WorkFlowStepsController::class, 'getStepByWorkflow']);
         Route::post('workflowsteps/reorder', [WorkFlowStepsController::class, 'reorder']);
         Route::apiResource('workflow_role/assign', WorkFlow_RoleAssignController::class);
-
-
         // routes/api.php
         Route::apiResource('supplier', controller: SupplierController::class);
         Route::apiResource('fileformat', FileFormatController::class);
         Route::apiResource('document', DocumentController::class);
         Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
-
-        Route::apiResource('request', controller: RequestController::class);
+        Route::apiResource('request', controller: CreateRequestController::class);
     });
 
 

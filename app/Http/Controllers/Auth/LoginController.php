@@ -24,7 +24,6 @@ class LoginController extends Controller
         Log::info('User found: ' . ($user ? $user->id : 'none'));
 
         if ($user) {
-            // Log the stored password hash and incoming password
             Log::info('Password from DB: ' . $user->password);
             Log::info('Password from request: ' . $request->password);
 
@@ -70,6 +69,8 @@ class LoginController extends Controller
         Log::info('Entity found: ' . ($entity ? $entity->id : 'none'));
 
         if ($entity && Hash::check($request->password, $entity->password)) {
+            Log::info('Entity password from DB: ' . $entity->password);
+            Log::info('Entity password from request: ' . $request->password);
             try {
                 $token = $entity->createToken('API Token', [], 'entiti-api')->accessToken;
                 Log::info('Token created successfully for entity: ' . $entity->id);

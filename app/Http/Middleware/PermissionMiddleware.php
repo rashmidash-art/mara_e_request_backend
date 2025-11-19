@@ -38,7 +38,25 @@ class PermissionMiddleware
         Log::info('Permission checked: ' . $permission);
 
         // Entity login
+        // if ($user instanceof Entiti) {
+        //     if (str_starts_with($permission, 'entities.')) {
+        //         return response()->json([
+        //             'status' => 'error',
+        //             'message' => 'Forbidden – Entities cannot access this module',
+        //             'required_permission' => $permission,
+        //         ], 403);
+        //     }
+
+        //     // Entities bypass for all other permissions
+        //     return $next($request);
+        // }
+
         if ($user instanceof Entiti) {
+            // Allow a specific route (like 'entities.itself') for entity users
+            if ($request->route()->getName() === 'entity.itself') {
+                return $next($request);
+            }
+
             if (str_starts_with($permission, 'entities.')) {
                 return response()->json([
                     'status' => 'error',
@@ -47,7 +65,6 @@ class PermissionMiddleware
                 ], 403);
             }
 
-            // Entities bypass for all other permissions
             return $next($request);
         }
 

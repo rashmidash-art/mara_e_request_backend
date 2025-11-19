@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Document;
+use App\Models\Entiti;
 use App\Models\FileFormat;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -16,13 +18,25 @@ class DocumentController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
 
         Log::info('DocumentController@index called');
 
         try {
-            $documents = Document::all();
+
+            $user = $request->user();
+            if ($user instanceof User && $user->user_type == 0) {
+                $documents = Document::all();
+            } else if ($user instanceof Entiti) {
+                $documents = Document::where('entiti_id', $user->id)->get();
+            } else if ($user instanceof User) {
+                // If you want normal users to see all
+                $documents = Document::all();
+                // OR restrict by permissions if needed
+                // $departments = Department::whereIn('id', $user->departments()->pluck('department_id'))->get();
+            }
+            // $documents = Document::all();
 
             if ($documents->isEmpty()) {
                 Log::warning('No documents found in index()');
