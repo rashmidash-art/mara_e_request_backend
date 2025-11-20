@@ -9,7 +9,7 @@ class Manager extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['employee_id', 'name', 'status'];
+    protected $fillable = ['user_id', 'entiti_id','department_id','employee_id', 'name', 'status'];
 
     public function departments()
 {

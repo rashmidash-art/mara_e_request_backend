@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\Entiti;
+use App\Models\Manager;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class DeprtmentController extends Controller
@@ -44,86 +46,96 @@ class DeprtmentController extends Controller
             ], 500);
         }
     }
-
-    // Create a new department
     public function store(Request $request)
     {
         try {
-
-
             $user = Auth::user();
-
-            $entitiId = $user->type === 'entity' ? $user->entiti_id : $request->entiti_id;
-
-
-
+            $entitiId = $user->type === 'entity'
+                ? $user->entiti_id
+                : $request->entiti_id;
             $request->validate([
                 'entiti_id' => 'required|integer|exists:entitis,id',
-                'manager_id' => 'nullable|integer|exists:managers,id',
-                'name' => 'required|string|max:255|unique:departments,name',
-                'department_code' => 'required|string|max:50|unique:departments,department_code',
-                'bc_dimention_value' => 'nullable|string|max:255',
+                'name' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    Rule::unique('departments')->where(
+                        fn($q) =>
+                        $q->where('entiti_id', $request->entiti_id)
+                    )
+                ],
+
+                'department_code' => [
+                    'required',
+                    'string',
+                    'max:50',
+                    Rule::unique('departments')->where(
+                        fn($q) =>
+                        $q->where('entiti_id', $request->entiti_id)
+                    )
+                ],
+
                 'enable_cost_center' => 'nullable|integer|in:0,1',
-                // 'work_flow_type_id' => 'required|integer|exists:work_flow_types,id',
                 'description' => 'nullable|string',
                 'budget' => 'nullable|numeric|min:0',
                 'status' => 'nullable|integer|in:0,1'
-            ], [
-                'entiti_id.required' => 'Entity ID is required.',
-                'entiti_id.exists' => 'Entity does not exist.',
-                // 'manager_id.required' => 'Manager ID is required.',
-                // 'manager_id.exists' => 'Manager does not exist.',
-                'name.required' => 'Department name is required.',
-                'name.unique' => 'Department name already exists.',
-                'department_code.required' => 'Department code is required.',
-                'department_code.unique' => 'Department code already exists.',
-                'bc_dimention_value.unique' => 'BC dimension value is unique.',
-                'enable_cost_center.in' => 'Enable cost center must be 0 or 1.',
-                // 'work_flow_type_id.required' => 'Work flow type ID is required.',
-                // 'work_flow_type_id.exists' => 'Work flow type does not exist.',
-                'budget.numeric' => 'Budget must be a number.',
-                'budget.min' => 'Budget cannot be negative.',
-                'description.string' => 'Description must be a valid text.',
-                'status.in' => 'Status must be 0 (Active) or 1 (Inactive).'
             ]);
-            $entity = Entiti::findOrFail($request->entiti_id);
 
-            $currentDepartmentBudget = Department::where('entiti_id', $request->entiti_id)->sum('budget');
+            $entity = Entiti::findOrFail($entitiId);
+
+            $currentDepartmentBudget = Department::where('entiti_id', $entitiId)
+                ->sum('budget');
 
             $requestedBudget = $request->budget ?? 0;
 
             if ($requestedBudget > $entity->budget) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Department budget cannot exceed the entity budget of ' . $entity->budget
+                    'message' => "Department budget cannot exceed entity budget ({$entity->budget})."
                 ], 400);
             }
 
             if (($currentDepartmentBudget + $requestedBudget) > $entity->budget) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Total department budgets (' . ($currentDepartmentBudget + $requestedBudget) . ') cannot exceed entity budget of ' . $entity->budget
+                    'message' => "Total department budgets exceed entity budget ({$entity->budget})."
                 ], 400);
             }
-
             $department = Department::create([
-                'entiti_id' => $request->entiti_id,
-                'manager_id' => $request->user_id,
-                'name' => $request->name,
-                'department_code' => $request->department_code,
-                'bc_dimention_value' => $request->bc_dimention_value,
-                'enable_cost_center' => $request->enable_cost_center ?? 0,
-                // 'work_flow_type_id' => $request->work_flow_type_id,
-                'budget' => $requestedBudget,
-                'description' => $request->description,
-                'status' => $request->status ?? 0
+                'entiti_id'             => $entitiId,
+                'manager_id'            => null,
+                'name'                  => $request->name,
+                'department_code'       => $request->department_code,
+                'bc_dimention_value'    => Department::generateBcDimension($request->department_code),
+                'enable_cost_center'    => $request->enable_cost_center ?? 0,
+                'budget'                => $requestedBudget,
+                'description'           => $request->description,
+                'status'                => $request->status ?? 0
             ]);
+
+            if ($request->user_id) {
+
+                $user = User::find($request->user_id);
+
+                $manager = Manager::create([
+                    'user_id'       => $request->user_id,
+                    'entiti_id'     => $entitiId,
+                    'department_id' => $department->id,
+                    'employee_id'   => $user->employee_id ?? null,
+                    'name'          => $user->name ?? null,
+                    'status'        => 0
+                ]);
+
+                $department->update([
+                    'manager_id' => $manager->id
+                ]);
+            }
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Department created successfully',
-                'data' => $department
-            ], 200);
+                'data'    => $department
+            ]);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
@@ -168,7 +180,9 @@ class DeprtmentController extends Controller
     public function update(Request $request, $id)
     {
         try {
+
             $department = Department::find($id);
+
             if (!$department) {
                 return response()->json([
                     'status' => 'error',
@@ -176,33 +190,43 @@ class DeprtmentController extends Controller
                 ], 404);
             }
 
+            // Validation
             $request->validate([
                 'entiti_id' => 'sometimes|required|integer|exists:entitis,id',
-                // 'manager_id' => 'sometimes|required|integer|exists:managers,id',
-                'name' => 'sometimes|required|string|max:255|unique:departments,name,' . $department->id,
+
+                'name' => [
+                    'sometimes',
+                    'required',
+                    'string',
+                    'max:255',
+                    Rule::unique('departments')
+                        ->where(function ($query) use ($request, $department) {
+                            return $query->where('entiti_id', $request->entiti_id ?? $department->entiti_id);
+                        })
+                        ->ignore($department->id)
+                ],
+
                 'department_code' => 'sometimes|required|string|max:50|unique:departments,department_code,' . $department->id,
-                'bc_dimention_value' => 'sometimes|nullable|string|max:255',
+
                 'enable_cost_center' => 'sometimes|integer|in:0,1',
-                // 'work_flow_type_id' => 'sometimes|required|integer|exists:work_flow_types,id',
                 'budget' => 'sometimes|numeric|min:0',
                 'description' => 'nullable|string',
-                'status' => 'sometimes|integer|in:0,1'
+                'status' => 'sometimes|integer|in:0,1',
+
+                'manager_id' => 'sometimes|nullable|integer|exists:managers,id',
             ], [
-                'entiti_id.exists' => 'Entity does not exist.',
-                // 'manager_id.exists' => 'Manager does not exist.',
-                'name.unique' => 'Department name already exists.',
+                'name.unique' => 'Department name already exists for this entity.',
                 'department_code.unique' => 'Department code already exists.',
                 'enable_cost_center.in' => 'Enable cost center must be 0 or 1.',
-                // 'work_flow_type_id.exists' => 'Work flow type does not exist.',
                 'budget.numeric' => 'Budget must be a number.',
                 'budget.min' => 'Budget cannot be negative.',
-                'description.string' => 'Description must be a valid text.',
-                'status.in' => 'Status must be 0 (Active) or 1 (Inactive).'
             ]);
 
+            // Determine the entity
             $entityId = $request->entiti_id ?? $department->entiti_id;
             $entity   = Entiti::findOrFail($entityId);
 
+            // Budget validations
             $requestedBudget = $request->budget ?? $department->budget;
 
             $currentDepartmentBudget = Department::where('entiti_id', $entityId)
@@ -219,18 +243,26 @@ class DeprtmentController extends Controller
             if (($currentDepartmentBudget + $requestedBudget) > $entity->budget) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Total department budgets (' . ($currentDepartmentBudget + $requestedBudget) . ') cannot exceed entity budget of ' . $entity->budget
+                    'message' => 'Total department budgets ('
+                        . ($currentDepartmentBudget + $requestedBudget)
+                        . ') cannot exceed entity budget of '
+                        . $entity->budget
                 ], 400);
             }
+            // Regenerate BC-Dimension only if department_code changed
+            $newBcDimension = $department->bc_dimention_value;
+            if ($request->department_code && $request->department_code !== $department->department_code) {
+                $newBcDimension = Department::generateBcDimension($request->department_code);
+            }
 
+            // Perform Update
             $department->update([
-                'entiti_id' => $request->entiti_id ?? $department->entiti_id,
-                'manager_id' => $request->user_id ?? $department->user_id,
+                'entiti_id' => $entityId,
+                'manager_id' => $request->manager_id ?? $department->manager_id,
                 'name' => $request->name ?? $department->name,
                 'department_code' => $request->department_code ?? $department->department_code,
-                'bc_dimention_value' => $request->bc_dimention_value ?? $department->bc_dimention_value,
+                'bc_dimention_value' => $newBcDimension,
                 'enable_cost_center' => $request->enable_cost_center ?? $department->enable_cost_center,
-                // 'work_flow_type_id' => $request->work_flow_type_id ?? $department->work_flow_type_id,
                 'budget' => $requestedBudget,
                 'description' => $request->description ?? $department->description,
                 'status' => $request->status ?? $department->status
@@ -249,11 +281,10 @@ class DeprtmentController extends Controller
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => $e->getMessage(),
+                'message' => $e->getMessage()
             ], 500);
         }
     }
-
 
     // Delete a department
     public function destroy($id)

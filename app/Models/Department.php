@@ -23,6 +23,23 @@ class Department extends Model
     ];
 
 
+    public static function generateBcDimension($departmentCode)
+    {
+        $last = Department::where('department_code', $departmentCode)
+            ->orderBy('id', 'desc')
+            ->value('bc_dimention_value');
+
+        if ($last) {
+            $number = (int) substr($last, strrpos($last, '-') + 1);
+            $next = $number + 1;
+        } else {
+            $next = 1;
+        }
+
+        return $departmentCode . '-' . str_pad($next, 3, '0', STR_PAD_LEFT);
+    }
+
+
     public function entity()
     {
         return $this->belongsTo(Entiti::class, 'entiti_id');

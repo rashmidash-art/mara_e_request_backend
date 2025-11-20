@@ -66,7 +66,7 @@ class SupplierController extends Controller
             'entiti_id' => 'required|string|max:255',
             // CSV strings
             'categories' => 'required|string|max:255',
-            'departments' => 'required|string|max:255',
+            'departments' => 'nullable|string|max:255',
             // Multi-file fields
             'regi_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
             'tax_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
@@ -152,11 +152,11 @@ class SupplierController extends Controller
             'phone' => 'sometimes|required|string|max:20',
             'contact_persion_name' => 'sometimes|required|string|max:255',
             'address' => 'sometimes|required|string',
-            'tax_id' => 'sometimes|required|string|max:100',
+            'tax_id' => 'sometimes|nullable|string|max:100',
             'regi_no' => 'sometimes|required|string|max:100',
             'categories' => 'sometimes|required|string|max:255',
             'entiti_id' => 'sometimes|required|string|max:255',
-            'departments' => 'sometimes|required|string|max:255',
+            // 'departments' => 'sometimes|required|string|max:255',
             'regi_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
             'tax_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
             'insurance_certificates.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
