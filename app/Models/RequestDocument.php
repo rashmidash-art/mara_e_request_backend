@@ -9,6 +9,10 @@ class RequestDocument extends Model
 {
     use HasFactory;
 
-      protected $fillable = ['request_id','document_id','document'];
-
+    //   protected $fillable = ['request_id','document_id','document'];
+     protected $fillable = [
+        'request_id',
+        'document_id',
+        'document'
+    ];
 }

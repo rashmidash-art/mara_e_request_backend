@@ -33,6 +33,11 @@ Route::post('password/reset', [PasswordResetContrller::class, 'reset']);
 
 
 Route::middleware('auth:api,entiti-api')->group(function () {
+    Route::get('budgets', [BudgetController::class, 'index']);
+
+});
+
+Route::middleware('auth:api,entiti-api')->group(function () {
     Route::post('admin/logout', [LoginController::class, 'logout']);
     Route::get('admin/user', function (Request $request) {
         return response()->json($request->user());
@@ -45,8 +50,13 @@ Route::middleware('auth:api,entiti-api')->group(function () {
     Route::middleware(['auth:entiti-api'])->group(function () {
         Route::get('entity/itself', [EntitiesController::class, 'itself']);
     });
+
+
+    Route::middleware(['auth:api'])->group(function () {
+        Route::get('user/{id}/loa', action: [BudgetController::class, 'getLoaByUser']);
+    });
+
     Route::middleware(['auth:api,entiti-api', 'permission'])->group(function () {
-        Route::get('budgets', [BudgetController::class, 'index']);
         Route::apiResource('entities', EntitiesController::class);
     });
 
@@ -67,10 +77,6 @@ Route::middleware('auth:api,entiti-api')->group(function () {
             Route::get('{role_id}/permissions', [RolePermissionController::class, 'getRolePermissions']);
             Route::post('permissions/manage', [RolePermissionController::class, 'manageRolePermissions']);
         });
-        // Route::prefix('budgets')->group(function () {
-        //     Route::get('/', [BudgetController::class, 'index']); // View all entity & department budgets
-        //     Route::post('/allocate', [BudgetController::class, 'allocate']); // Allocate amount to department
-        // });
         Route::post('budgets/allocate', [BudgetController::class, 'allocate']); // Admin only
         // -----------------------------
         // Master Modules

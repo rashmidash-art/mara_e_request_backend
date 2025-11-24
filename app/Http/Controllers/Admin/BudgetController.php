@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Entiti;
 use App\Models\Department;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -125,6 +126,18 @@ class BudgetController extends Controller
             'status'  => 'success',
             'message' => 'Department budget updated successfully',
             'data'    => $department,
+        ]);
+    }
+
+
+
+    public function getLoaByUser($id){
+        $users = User::where('id', $id)->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $users,
+            'users' => $users
         ]);
     }
 }

@@ -9,5 +9,5 @@ class WorkFlow extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['workflow_id','categori_id', 'name','steps', 'description', 'status'];
+    protected $fillable = ['workflow_id', 'categori_id', 'request_type_id', 'name', 'steps', 'description', 'status'];
 }

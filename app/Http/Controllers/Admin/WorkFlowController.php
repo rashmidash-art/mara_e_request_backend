@@ -40,6 +40,7 @@ class WorkFlowController extends Controller
     {
         $validated = $request->validate([
             'categori_id' => 'nullable|integer',
+            'request_type_id' => 'nullable|integer',
             'name' => 'nullable|string|max:255',
             'steps' => 'nullable|integer',
             'status' => 'nullable|integer',
@@ -100,6 +101,7 @@ class WorkFlowController extends Controller
     {
         $validated = $request->validate([
             'categori_id' => 'nullable|integer',
+            'request_type_id' => 'nullable|integer',
             'name' => 'nullable|string|max:255',
             'steps' => 'nullable|integer',
             'status' => 'nullable|integer',

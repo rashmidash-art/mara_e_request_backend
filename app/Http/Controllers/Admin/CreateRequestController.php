@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Department;
 use Illuminate\Http\Request;
 use App\Models\Document;
 use App\Models\Request as ModelsRequest;
@@ -41,17 +42,27 @@ class CreateRequestController extends Controller
     {
         try {
             $validated = $request->validate([
-                'request_type'   => 'nullable|integer',
-                'category_id'    => 'nullable|integer',
-                'department_id'  => 'nullable|integer',
-                'behalf_of'      => 'nullable|in:0,1',
-                'behalf_department_id' => 'required_if:behalf_of,1',
+                'entiti'                => 'nullable|integer',
+                'user'                  => 'nullable|integer',
+                'request_type'          => 'nullable|integer',
+                'category'              => 'nullable|integer',
+                'department'            => 'nullable|integer',
+                'amount'                => 'nullable|string',
+                'description'           => 'nullable|string',
+                'supplier_id'           => 'nullable|integer',
+                'expected_date'         => 'nullable|string',
+                'priority'              => 'nullable|string',
+                'behalf_of'             => 'nullable|in:0,1',
+                'behalf_of_department'  => 'required_if:behalf_of,1',
+                'business_justification' => 'nullable|string',
+                'status'                => 'nullable|in:submitted,draft,deleted',
 
-                'attachments'                => 'nullable|array',
-                'attachments.*.document_id'  => 'required|integer',
-                'attachments.*.file'         => 'required|file|max:10240',
+                'attachments'                  => 'nullable|array',
+                'attachments.*.document_id'    => 'required|integer',
+                'attachments.*.file'           => 'required|file|max:10240',
             ]);
 
+            // Generate Request Number
             $year = date('Y');
             $last = ModelsRequest::whereYear('created_at', $year)
                 ->orderBy('id', 'desc')
@@ -60,34 +71,58 @@ class CreateRequestController extends Controller
             $nextNumber = $last ? $last->id + 1 : 1;
             $request_no = "REQ-{$year}-" . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
 
-            $requestMaster = ModelsRequest::create([
-                'request_id'         => $request_no,       // stored in your DB column "request_id"
-                'entiti'             => $request->entiti_id ?? null,
-                'amount'             => $request->amount ?? null,
-                'user'               => $request->user_id ?? null,
-                'request_type'       => $request->requestType ?? null,
-                'category'           => $request->category ?? null,
-                'department'         =>  $request->department_id ?? null,
-                'behalf_of'          =>  $request->requestOnBehalf ?? null,
-                'description'           => $request->description ?? null,
-                'supplier_id'           => $request->supplier ?? null,
-                'expected_date'  => $request->date ?? null,
-                'document_id' => $request->document_id ?? null,
-                'business_justification'  => $request->business_justification ?? null,
-                'behalf_of_department' =>  $request->onBehalfDepartment ?? null,
+            // Create Request Master
+            $req = ModelsRequest::create([
+                'request_id'             => $request_no,
+                'entiti'                 => $request->entiti,
+                'user'                   => $request->user,
+                'request_type'           => $request->request_type,
+                'category'               => $request->category,
+                'department'             => $request->department,
+                'amount'                 => $request->amount,
+                'description'            => $request->description,
+                'supplier_id'            => $request->supplier_id,
+                'expected_date'          => $request->expected_date,
+                'priority'               => $request->priority,
+                'behalf_of'              => $request->behalf_of,
+                'behalf_of_department'   => $request->behalf_of_department,
+                'business_justification' => $request->business_justification,
+                'status'                 => $request->status ?? 'draft'
             ]);
 
-            if (!empty($validated['attachments'])) {
-                foreach ($validated['attachments'] as $doc) {
+            // Log the incoming request for debugging
+            Log::info('Request Attachments:', $request->all()); // This logs the entire request data
 
-                    $file = $doc['file'];
+            // Store documents
+            if (!empty($request->attachments)) {
+                foreach ($request->attachments as $index => $doc) {
+
+                    $file = $request->file("attachments.$index.file");
+                    if (!$file) {
+                        continue;
+                    }
+
+                    // Original filename
                     $originalName = $file->getClientOriginalName();
-                    $documentType = Document::find($doc['document_id']);
-                    $folder = strtolower(str_replace(' ', '_', $documentType->name));
-                    $newFileName = $requestMaster->id . '_' . $originalName;
-                    $file->storeAs("upload/{$folder}", $newFileName, 'public');
+                    $departmentName = Department::find($req->department)->name ?? 'unknown';
+                    $departmentName = str_replace(' ', '_', strtolower($departmentName));
+
+                    // Final filename: requestid_entitiid_departmentname_filename
+                    $newFileName =
+                        $req->request_id . "_" .
+                        $req->entiti . "_" .
+                        $departmentName . "_" .
+                        $originalName;
+
+                    // Single folder
+                    $folder = "requestdocuments";
+
+                    // Store file
+                    $file->storeAs($folder, $newFileName, 'public');
+
+                    // Save DB record
                     RequestDocument::create([
-                        'request_id'  => $requestMaster->id,
+                        'request_id'  => $req->request_id,
                         'document_id' => $doc['document_id'],
                         'document'    => $newFileName,
                     ]);
@@ -95,14 +130,17 @@ class CreateRequestController extends Controller
             }
 
 
+
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Request created successfully',
-                'data' => $requestMaster
+                'data' => $req
             ], 201);
         } catch (\Exception $e) {
 
             Log::error("Request Store Error", ['error' => $e->getMessage()]);
+            Log::info("Attachments: ", ['attachments' => $request->attachments]);
 
             return response()->json([
                 'status' => 'error',
@@ -111,6 +149,7 @@ class CreateRequestController extends Controller
             ], 500);
         }
     }
+
 
     /** Show single request */
     public function show($id)
