@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Role extends Model
 {
 
-     use HasFactory;
+    use HasFactory;
 
     protected $fillable = [
         'name',
@@ -22,8 +22,13 @@ class Role extends Model
         return $this->belongsToMany(User::class, 'role_user');
     }
 
+    //     public function permissions()
+    // {
+    //     return $this->belongsToMany(Permission::class, 'permission_role');
+    // }
+
     public function permissions()
-{
-    return $this->belongsToMany(Permission::class, 'permission_role');
-}
+    {
+        return $this->belongsToMany(Permission::class, 'permission_role', 'role_id', 'permission_id');
+    }
 }

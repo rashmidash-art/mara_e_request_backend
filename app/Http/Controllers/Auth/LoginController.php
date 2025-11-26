@@ -76,7 +76,8 @@ class LoginController extends Controller
                 Log::info('Token created successfully for entity: ' . $entity->id);
 
                 // Entity → all permissions except entities.*
-                $permissions = Permission::where('name', 'not like', 'entities.%')->pluck('name')->toArray();
+                $permissions = Permission::where('name', 'entities.view')->pluck('name')->toArray();
+
 
                 return response()->json([
                     'status'       => 'success',

@@ -27,14 +27,45 @@ class EntitiesController extends Controller
     {
         return response()->json([
             'status' => 'success',
-            'data' => $request->user(),
+            'data' => $request->user()
         ]);
     }
-    public function index()
-    {
-        $entities = Entiti::all();
-        return response()->json(['status' => 'success', 'data' => $entities]);
+
+    // public function index()
+    // {
+    //     $entities = Entiti::all();
+    //     return response()->json(['status' => 'success', 'data' => $entities]);
+    // }
+
+
+    public function index(Request $request)
+{
+    $user = $request->user();
+
+    // ADMIN → return all entities
+    if ($user instanceof User && $user->user_type == 0) {
+        return response()->json([
+            'status' => 'success',
+            'data' => Entiti::all()
+        ]);
     }
+
+    // ENTITI → only his own details
+    if ($user instanceof Entiti) {
+        return response()->json([
+            'status' => 'success',
+            'data' => [$user]
+        ]);
+    }
+
+    return response()->json([
+        'status' => 'error',
+        'message' => 'Forbidden – You cannot access entity list',
+        'required_permission' => 'entities.view'
+    ], 403);
+}
+
+
 
     /**
      * Store a newly created resource in storage.

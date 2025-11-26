@@ -8,6 +8,11 @@ use Illuminate\Http\Request;
 use App\Models\Document;
 use App\Models\Request as ModelsRequest;
 use App\Models\RequestDocument;
+use App\Models\RequestWorkflowDetails;
+use App\Models\WorkFlow;
+use App\Models\WorkflowRoleAssign;
+use App\Models\WorkflowStep;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -37,10 +42,11 @@ class CreateRequestController extends Controller
         }
     }
 
-    /** Create a new request */
     public function store(Request $request)
     {
         try {
+
+            // ------------------------- VALIDATION ------------------------- //
             $validated = $request->validate([
                 'entiti'                => 'nullable|integer',
                 'user'                  => 'nullable|integer',
@@ -62,7 +68,7 @@ class CreateRequestController extends Controller
                 'attachments.*.file'           => 'required|file|max:10240',
             ]);
 
-            // Generate Request Number
+            // ------------------------- CREATE REQUEST ID ------------------------- //
             $year = date('Y');
             $last = ModelsRequest::whereYear('created_at', $year)
                 ->orderBy('id', 'desc')
@@ -71,7 +77,7 @@ class CreateRequestController extends Controller
             $nextNumber = $last ? $last->id + 1 : 1;
             $request_no = "REQ-{$year}-" . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
 
-            // Create Request Master
+            // ------------------------- INSERT REQUEST MASTER ------------------------- //
             $req = ModelsRequest::create([
                 'request_id'             => $request_no,
                 'entiti'                 => $request->entiti,
@@ -90,37 +96,34 @@ class CreateRequestController extends Controller
                 'status'                 => $request->status ?? 'draft'
             ]);
 
-            // Log the incoming request for debugging
-            Log::info('Request Attachments:', $request->all()); // This logs the entire request data
+            Log::info("Request Created:", ['request_id' => $req->request_id]);
 
-            // Store documents
+
+            // ------------------------- HANDLE ATTACHMENTS ------------------------- //
             if (!empty($request->attachments)) {
+
                 foreach ($request->attachments as $index => $doc) {
 
                     $file = $request->file("attachments.$index.file");
-                    if (!$file) {
-                        continue;
-                    }
+                    if (!$file) continue;
 
-                    // Original filename
                     $originalName = $file->getClientOriginalName();
+
                     $departmentName = Department::find($req->department)->name ?? 'unknown';
                     $departmentName = str_replace(' ', '_', strtolower($departmentName));
 
-                    // Final filename: requestid_entitiid_departmentname_filename
-                    $newFileName =
-                        $req->request_id . "_" .
+                    // final filename = REQ-XXXX_entiti_dept_filename
+                    $newFileName = $req->request_id . "_" .
                         $req->entiti . "_" .
                         $departmentName . "_" .
                         $originalName;
 
-                    // Single folder
-                    $folder = "requestdocuments";
+                    $folder = "requestdocuments"; // single folder
 
-                    // Store file
+                    // store file
                     $file->storeAs($folder, $newFileName, 'public');
 
-                    // Save DB record
+                    // insert into DB
                     RequestDocument::create([
                         'request_id'  => $req->request_id,
                         'document_id' => $doc['document_id'],
@@ -129,9 +132,59 @@ class CreateRequestController extends Controller
                 }
             }
 
+            // ------------------------- FETCH WORKFLOW ------------------------- //
+            $workflow = WorkFlow::where('categori_id', $req->category)
+                ->where('request_type_id', $req->request_type)
+                ->first();
+
+            // ------------------------- INSERT REQUEST WORKFLOW DETAILS ------------------------- //
+
+            // Get workflow by BOTH category + request type
+            $workflow = WorkFlow::where('categori_id', $req->category)
+                ->where('request_type_id', $req->request_type)
+                ->first();
+
+            if ($workflow) {
+
+                Log::info("Workflow Found", $workflow->toArray());
+
+                // 1. Get all workflow steps in correct order
+                $steps = WorkflowStep::where('workflow_id', $workflow->id)
+                    ->orderBy('order_id', 'asc')
+                    ->get();
+
+                foreach ($steps as $step) {
+
+                    // 2. Get the role assigned for this step
+                    $roles = WorkflowRoleAssign::where('workflow_id', $workflow->id)
+                        ->where('step_id', $step->id)
+                        ->get();
+
+                    foreach ($roles as $role) {
+
+                        // 3. Insert in required format
+                        RequestWorkflowDetails::create([
+                            'request_id'        => $req->request_id,
+                            'workflow_id'       => $workflow->id,
+                            'workflow_step_id'  => $step->id,
+                            'workflow_role_id'  => $role->role_id,
+                            'status'            => 'pending',
+                            'is_sendback'       => 0,
+                        ]);
+
+                        Log::info("Workflow Detail Inserted", [
+                            'request_id' => $req->request_id,
+                            'workflow_id' => $workflow->id,
+                            'step_id' => $step->id,
+                            'role_id' => $role->role_id
+                        ]);
+                    }
+                }
+            }
 
 
 
+            // ------------------------- FINAL RESPONSE ------------------------- //
             return response()->json([
                 'status' => 'success',
                 'message' => 'Request created successfully',
@@ -140,7 +193,6 @@ class CreateRequestController extends Controller
         } catch (\Exception $e) {
 
             Log::error("Request Store Error", ['error' => $e->getMessage()]);
-            Log::info("Attachments: ", ['attachments' => $request->attachments]);
 
             return response()->json([
                 'status' => 'error',
@@ -149,6 +201,119 @@ class CreateRequestController extends Controller
             ], 500);
         }
     }
+
+    /** Create a new request */
+    // public function store(Request $request)
+    // {
+    //     try {
+    //         $validated = $request->validate([
+    //             'entiti'                => 'nullable|integer',
+    //             'user'                  => 'nullable|integer',
+    //             'request_type'          => 'nullable|integer',
+    //             'category'              => 'nullable|integer',
+    //             'department'            => 'nullable|integer',
+    //             'amount'                => 'nullable|string',
+    //             'description'           => 'nullable|string',
+    //             'supplier_id'           => 'nullable|integer',
+    //             'expected_date'         => 'nullable|string',
+    //             'priority'              => 'nullable|string',
+    //             'behalf_of'             => 'nullable|in:0,1',
+    //             'behalf_of_department'  => 'required_if:behalf_of,1',
+    //             'business_justification' => 'nullable|string',
+    //             'status'                => 'nullable|in:submitted,draft,deleted',
+
+    //             'attachments'                  => 'nullable|array',
+    //             'attachments.*.document_id'    => 'required|integer',
+    //             'attachments.*.file'           => 'required|file|max:10240',
+    //         ]);
+
+    //         // Generate Request Number
+    //         $year = date('Y');
+    //         $last = ModelsRequest::whereYear('created_at', $year)
+    //             ->orderBy('id', 'desc')
+    //             ->first();
+
+    //         $nextNumber = $last ? $last->id + 1 : 1;
+    //         $request_no = "REQ-{$year}-" . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
+
+    //         // Create Request Master
+    //         $req = ModelsRequest::create([
+    //             'request_id'             => $request_no,
+    //             'entiti'                 => $request->entiti,
+    //             'user'                   => $request->user,
+    //             'request_type'           => $request->request_type,
+    //             'category'               => $request->category,
+    //             'department'             => $request->department,
+    //             'amount'                 => $request->amount,
+    //             'description'            => $request->description,
+    //             'supplier_id'            => $request->supplier_id,
+    //             'expected_date'          => $request->expected_date,
+    //             'priority'               => $request->priority,
+    //             'behalf_of'              => $request->behalf_of,
+    //             'behalf_of_department'   => $request->behalf_of_department,
+    //             'business_justification' => $request->business_justification,
+    //             'status'                 => $request->status ?? 'draft'
+    //         ]);
+
+    //         // Log the incoming request for debugging
+    //         Log::info('Request Attachments:', $request->all()); // This logs the entire request data
+
+    //         // Store documents
+    //         if (!empty($request->attachments)) {
+    //             foreach ($request->attachments as $index => $doc) {
+
+    //                 $file = $request->file("attachments.$index.file");
+    //                 if (!$file) {
+    //                     continue;
+    //                 }
+
+    //                 // Original filename
+    //                 $originalName = $file->getClientOriginalName();
+    //                 $departmentName = Department::find($req->department)->name ?? 'unknown';
+    //                 $departmentName = str_replace(' ', '_', strtolower($departmentName));
+
+    //                 // Final filename: requestid_entitiid_departmentname_filename
+    //                 $newFileName =
+    //                     $req->request_id . "_" .
+    //                     $req->entiti . "_" .
+    //                     $departmentName . "_" .
+    //                     $originalName;
+
+    //                 // Single folder
+    //                 $folder = "requestdocuments";
+
+    //                 // Store file
+    //                 $file->storeAs($folder, $newFileName, 'public');
+
+    //                 // Save DB record
+    //                 RequestDocument::create([
+    //                     'request_id'  => $req->request_id,
+    //                     'document_id' => $doc['document_id'],
+    //                     'document'    => $newFileName,
+    //                 ]);
+    //             }
+    //         }
+
+
+
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'Request created successfully',
+    //             'data' => $req
+    //         ], 201);
+    //     } catch (\Exception $e) {
+
+    //         Log::error("Request Store Error", ['error' => $e->getMessage()]);
+    //         Log::info("Attachments: ", ['attachments' => $request->attachments]);
+
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Something went wrong',
+    //             'error' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
 
 
     /** Show single request */
@@ -304,5 +469,23 @@ class CreateRequestController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+        public function myActionableRequests()
+    {
+        $user= Auth::user();
+
+        $roleIds = $user->roles()->pluck('id');
+
+        $requests = RequestWorkflowDetails::whereIn('workflow_role_id', $roleIds)
+            ->where('status', 'pending')
+            ->with('request')
+            ->get()
+            ->groupBy('request_id');
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $requests
+        ]);
     }
 }

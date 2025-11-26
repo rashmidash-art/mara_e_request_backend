@@ -162,4 +162,31 @@ class WorkFlowController extends Controller
             ], 500);
         }
     }
+
+
+
+    // app/Http/Controllers/WorkflowController.php
+    public function getWorkflowByTypeAndCategory(Request $request)
+    {
+        $request->validate([
+            'request_type_id' => 'required|integer',
+            'category_id' => 'required|integer',
+        ]);
+
+        $workflow = WorkFlow::where('request_type_id', $request->request_type_id)
+            ->where('categori_id', $request->category_id)
+            ->first();
+
+        if (!$workflow) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Workflow not found for the selected request type & category.'
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $workflow
+        ]);
+    }
 }

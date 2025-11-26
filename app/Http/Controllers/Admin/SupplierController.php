@@ -59,7 +59,7 @@ class SupplierController extends Controller
             'bc_code' => 'required|string|max:255|unique:suppliers,bc_code',
             'email' => 'required|email|unique:suppliers,email',
             'phone' => 'required|string|max:20',
-            'contact_persion_name' => 'required|string|max:255',
+            'contact_persion_name' => 'nullable|string|max:255',
             'address' => 'required|string',
             'tax_id' => 'nullable|string|max:100',
             'regi_no' => 'nullable|string|max:100',

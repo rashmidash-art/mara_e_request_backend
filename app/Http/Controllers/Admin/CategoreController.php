@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Models\RequestType;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
@@ -147,4 +148,13 @@ class CategoreController extends Controller
         }
     }
 
+    public function getRequestTypeByCat($id)
+    {
+        $getRequestType = RequestType::where('categori_id', $id)->where('status', 1)->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $getRequestType,
+        ]);
+    }
 }

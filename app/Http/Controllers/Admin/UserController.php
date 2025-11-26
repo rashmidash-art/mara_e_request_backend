@@ -17,10 +17,24 @@ class UserController extends Controller
     /**
      * Display all users.
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $users = User::with('roles')->where('user_type', 1)->get();
+
+            $users = $request->user();
+            if ($users instanceof User && $users->user_type == 0) {
+                // $departments = Department::all();
+                $users = User::with('roles')->where('user_type', 1)->get();
+            } else if ($users instanceof Entiti) {
+                $users = User::with('roles')->where('entiti_id', $users->id)->where('user_type', 1)->get();
+                // $departments = Department::where('entiti_id', $users->id)->get();
+            } else if ($users instanceof User) {
+                $users = User::with('roles')->where('user_type', 1)->get();
+                // $departments = Department::all();
+                // OR restrict by permissions if needed
+                // $departments = Department::whereIn('id', $user->departments()->pluck('department_id'))->get();
+            }
+            // $users = User::with('roles')->where('user_type', 1)->get();
             return response()->json([
                 'status' => 'success',
                 'message' => 'Users retrieved successfully',
@@ -48,7 +62,11 @@ class UserController extends Controller
                 'designation' => 'required|string|max:255',
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:6',
-                'employee_id' => 'required|string|unique:users,employee_id', //  no space
+                'employee_id' => [
+                    'required',
+                    'string',
+                    Rule::unique('users', 'employee_id')->where('entiti_id', $request->entiti_id)
+                ],
                 'entiti_id' => 'required|integer|exists:entitis,id',
                 'department_id' => 'required|integer|exists:departments,id',
                 'loa' => 'required|numeric|min:0',
@@ -331,118 +349,117 @@ class UserController extends Controller
     /**
      * Update a user.
      */
-   public function update(Request $request, $id)
-{
-    try {
-        // Validation
-        $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'designation' => 'sometimes|required|string|max:255',
-            'email' => ['sometimes', 'required', 'email', Rule::unique('users')->ignore($id)],
-            'password' => 'sometimes|required|string|min:6',
-            'employee_id' => ['sometimes', 'required', 'string', Rule::unique('users')->ignore($id)],
-            'entiti_id' => 'sometimes|required|integer|exists:entitis,id',
-            'department_id' => 'sometimes|required|integer|exists:departments,id',
-            'loa' => 'sometimes|required|numeric|min:0',
-            'signature' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048',
-            'status' => ['sometimes', 'required', Rule::in(['Active', 'Inactive', 'Away'])],
-            'roles' => 'sometimes|array',
-        ]);
+    public function update(Request $request, $id)
+    {
+        try {
+            // Validation
+            $request->validate([
+                'name' => 'sometimes|required|string|max:255',
+                'designation' => 'sometimes|required|string|max:255',
+                'email' => ['sometimes', 'required', 'email', Rule::unique('users')->ignore($id)],
+                'password' => 'sometimes|required|string|min:6',
+                'employee_id' => ['sometimes', 'required', 'string', Rule::unique('users')->ignore($id)],
+                'entiti_id' => 'sometimes|required|integer|exists:entitis,id',
+                'department_id' => 'sometimes|required|integer|exists:departments,id',
+                'loa' => 'sometimes|required|numeric|min:0',
+                'signature' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048',
+                'status' => ['sometimes', 'required', Rule::in(['Active', 'Inactive', 'Away'])],
+                'roles' => 'sometimes|array',
+            ]);
 
-        $user = User::findOrFail($id);
+            $user = User::findOrFail($id);
 
-        // Determine department and entity for validation
-        $department_id = $request->department_id ?? $user->department_id;
-        $entiti_id = $request->entiti_id ?? $user->entiti_id;
+            // Determine department and entity for validation
+            $department_id = $request->department_id ?? $user->department_id;
+            $entiti_id = $request->entiti_id ?? $user->entiti_id;
 
-        $department = Department::find($department_id);
-        $entity = Entiti::find($entiti_id);
+            $department = Department::find($department_id);
+            $entity = Entiti::find($entiti_id);
 
-        if (!$department || !$entity || $department->entiti_id != $entity->id) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'The selected department does not belong to the specified entity.'
-            ], 400);
-        }
-
-        // Check department budget if LOA is being updated
-        if ($request->has('loa')) {
-            $totalLoa = User::where('department_id', $department->id)
-                ->where('id', '!=', $user->id)
-                ->sum('loa');
-
-            if (($totalLoa + $request->loa) > $department->budget) {
+            if (!$department || !$entity || $department->entiti_id != $entity->id) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Cannot update LOA: department budget exceeded.'
+                    'message' => 'The selected department does not belong to the specified entity.'
                 ], 400);
             }
-        }
 
-        // Prepare data to update
-        $data = $request->only([
-            'name',
-            'designation',
-            'email',
-            'employee_id',
-            'entiti_id',
-            'department_id',
-            'loa',
-            'status'
-        ]);
+            // Check department budget if LOA is being updated
+            if ($request->has('loa')) {
+                $totalLoa = User::where('department_id', $department->id)
+                    ->where('id', '!=', $user->id)
+                    ->sum('loa');
 
-        if ($request->has('password')) {
-            $data['password'] = Hash::make($request->password);
-        }
-
-        // Handle signature file upload
-        if ($request->hasFile('signature')) {
-            $file = $request->file('signature');
-            $extension = $file->getClientOriginalExtension();
-            $filename = 'uid_' . $user->id . '_signature.' . $extension;
-            $path = $file->storeAs('upload/signature', $filename, 'public');
-
-            // Optional: delete old file
-            if ($user->signature) {
-                Storage::disk('public')->delete($user->signature);
+                if (($totalLoa + $request->loa) > $department->budget) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Cannot update LOA: department budget exceeded.'
+                    ], 400);
+                }
             }
 
-            $data['signature'] = $path;
+            // Prepare data to update
+            $data = $request->only([
+                'name',
+                'designation',
+                'email',
+                'employee_id',
+                'entiti_id',
+                'department_id',
+                'loa',
+                'status'
+            ]);
+
+            if ($request->has('password')) {
+                $data['password'] = Hash::make($request->password);
+            }
+
+            // Handle signature file upload
+            if ($request->hasFile('signature')) {
+                $file = $request->file('signature');
+                $extension = $file->getClientOriginalExtension();
+                $filename = 'uid_' . $user->id . '_signature.' . $extension;
+                $path = $file->storeAs('upload/signature', $filename, 'public');
+
+                // Optional: delete old file
+                if ($user->signature) {
+                    Storage::disk('public')->delete($user->signature);
+                }
+
+                $data['signature'] = $path;
+            }
+
+            // Update user
+            $user->update($data);
+
+            // Sync roles
+            if ($request->has('roles')) {
+                $user->roles()->sync($request->roles);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'User updated successfully',
+                'data' => $user
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'User not found'
+            ], 404);
+        } catch (QueryException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to update user',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        // Update user
-        $user->update($data);
-
-        // Sync roles
-        if ($request->has('roles')) {
-            $user->roles()->sync($request->roles);
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'User updated successfully',
-            'data' => $user
-        ], 200);
-
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Validation failed',
-            'errors' => $e->errors()
-        ], 422);
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'User not found'
-        ], 404);
-    } catch (QueryException $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Failed to update user',
-            'error' => $e->getMessage()
-        ], 500);
     }
-}
 
 
 

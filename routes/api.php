@@ -17,6 +17,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetContrller;
 use App\Http\Controllers\Admin\DeprtmentController;
 use App\Http\Controllers\Admin\RequestController;
+use App\Http\Controllers\Admin\RequestWorkflowDetailsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WorkFlowStepsController;
 use App\Http\Controllers\Admin\WorkFlowTypeController;
@@ -34,7 +35,6 @@ Route::post('password/reset', [PasswordResetContrller::class, 'reset']);
 
 Route::middleware('auth:api,entiti-api')->group(function () {
     Route::get('budgets', [BudgetController::class, 'index']);
-
 });
 
 Route::middleware('auth:api,entiti-api')->group(function () {
@@ -60,6 +60,10 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('entities', EntitiesController::class);
     });
 
+
+    Route::middleware(['permission'])->group(function () {
+        Route::apiResource('request', controller: CreateRequestController::class);
+    });
     Route::middleware(['auth:api,entiti-api', 'permission'])->group(function () {
         Route::apiResource('roles', RoleController::class);
         Route::post('roles/assign', [RoleController::class, 'assignRole']);
@@ -95,18 +99,30 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::get('users/next-employee-id', [UserController::class, 'nextEmployeeId']);
         Route::apiResource('users', UserController::class);
         Route::apiResource('categore', CategoreController::class);
+        Route::get('/categories/{id}/request-types', [CategoreController::class, 'getRequestTypeByCat']);
         Route::apiResource('request_type', RequestTypeController::class);
         Route::apiResource('workflow', WorkFlowController::class);
         Route::apiResource('workflowsteps', WorkFlowStepsController::class);
         Route::get('workflow/{id}/steps', action: [WorkFlowStepsController::class, 'getStepByWorkflow']);
         Route::post('workflowsteps/reorder', [WorkFlowStepsController::class, 'reorder']);
         Route::apiResource('workflow_role/assign', WorkFlow_RoleAssignController::class);
+
+        Route::get('/workflowbyTypeandCat', [WorkFlowController::class, 'getWorkflowByTypeAndCategory']);
+
+
+
         // routes/api.php
         Route::apiResource('supplier', controller: SupplierController::class);
         Route::apiResource('fileformat', FileFormatController::class);
         Route::apiResource('document', DocumentController::class);
         Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
         Route::apiResource('request', controller: CreateRequestController::class);
+        Route::get('/requests/actionable', [
+            CreateRequestController::class,
+            'myActionableRequests'
+        ]);
+        Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
+        Route::post('/requests/action', [RequestWorkflowDetailsController::class, 'takeAction']);
     });
 
 
