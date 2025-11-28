@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Department;
 use Illuminate\Http\Request;
 use App\Models\Document;
+use App\Models\Entiti;
 use App\Models\Request as ModelsRequest;
 use App\Models\RequestDocument;
 use App\Models\RequestWorkflowDetails;
+use App\Models\User;
 use App\Models\WorkFlow;
 use App\Models\WorkflowRoleAssign;
 use App\Models\WorkflowStep;
@@ -21,18 +23,135 @@ class CreateRequestController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $data = ModelsRequest::orderByDesc('id')->get();
+            $auth = Auth::user();
+
+            // Detect login types
+            $isEntityLogin  = $auth instanceof Entiti;
+            $isSuperAdmin   = !$isEntityLogin && isset($auth->user_type) && $auth->user_type == 0;
+
+            // -----------------------------------------------
+            // Base Query (ONLY REQUEST TABLE)
+            // -----------------------------------------------
+            $query = ModelsRequest::with([
+                'categoryData:id,name',
+                'entityData:id,name',
+                'userData:id,name',
+                'requestTypeData:id,name',
+                'departmentData:id,name',
+                'supplierData:id,name',
+                'documents:id,request_id,document_id,document', // Eager load the documents
+                'currentWorkflowRole' => function ($q) {
+                    $q->select(
+                        'id',
+                        'request_id',
+                        'workflow_role_id',
+                        'assigned_user_id',
+                        'status',
+                        'workflow_step_id'
+                    );
+                },
+                'currentWorkflowRole.role:id,name',
+                'currentWorkflowRole.assignedUser:id,name',
+                'currentWorkflowRole.workflowStep:id,name'
+            ])->orderByDesc('id');
+
+            // -----------------------------------------------
+            //  SUPERADMIN → ALL REQUESTS
+            // -----------------------------------------------
+            if ($isSuperAdmin) {
+                $requests = $query->get();
+            }
+            // -----------------------------------------------
+            //  ENTITY LOGIN → requests of that entity
+            // -----------------------------------------------
+            elseif ($isEntityLogin) {
+                $requests = $query->where('entiti', $auth->id)->get();
+            }
+            // -----------------------------------------------
+            //  USER LOGIN → assigned requests
+            // -----------------------------------------------
+            else {
+                $userId = $auth->id;
+
+                $requests = $query->whereHas('currentWorkflowRole', function ($q) use ($userId) {
+                    $q->where('assigned_user_id', $userId)
+                        ->where('status', 'pending');
+                })->get();
+            }
+
+            // -----------------------------------------------
+            // FORMAT RESPONSE (INLINE)
+            // -----------------------------------------------
+            $data = $requests->map(function ($req) {
+
+                $workflow = $req->currentWorkflowRole;
+
+                return [
+                    'request_id'   => $req->request_id,
+                    'amount'       => $req->amount,
+                    'priority'     => $req->priority,
+                    'description'  => $req->description,
+                    'status'       => $req->status,
+                    'created_at'   => $req->created_at?->format('Y-m-d H:i:s'),
+
+                    'category' => [
+                        'id'   => $req->category,
+                        'name' => $req->categoryData?->name,
+                    ],
+
+                    'entity' => [
+                        'id'   => $req->entiti,
+                        'name' => $req->entityData?->name,
+                    ],
+
+                    'requested_by' => [
+                        'id'   => $req->user,
+                        'name' => $req->userData?->name,
+                    ],
+
+                    'request_type' => [
+                        'id'   => $req->request_type,
+                        'name' => $req->requestTypeData?->name,
+                    ],
+
+
+                    'workflow' => [
+                        'step'          => $workflow?->workflowStep?->name,
+                        'role'          => $workflow?->role?->name,
+                        'assigned_user' => $workflow?->assignedUser?->name,
+                        'status'        => $workflow?->status,
+                    ],
+
+                    // Include documents with only document_id and document name
+                    // 'documents' => $req->documents->map(function ($doc) {
+                    //     return [
+                    //         'document_id' => $doc->document_id,
+                    //         'document'    => $doc->document
+                    //     ];
+                    // }),
+
+                    'documents' => $req->documents->map(function ($doc) {
+                        // Extract the actual filename after the last underscore
+                        $filename = last(explode('_', $doc->document));
+
+                        return [
+                            'document_id' => $doc->document_id,
+                            'document'    => $filename
+                        ];
+                    }),
+                ];
+            });
 
             return response()->json([
-                'status' => 'success',
-                'message' => 'Requests fetched successfully',
-                'data' => $data
-            ], 200);
+                'status'  => 'success',
+                'data'    => $data
+            ]);
         } catch (\Exception $e) {
-            Log::error("Request Fetch Failed", ['error' => $e->getMessage()]);
+
+            Log::error('Request index failed: ' . $e->getMessage());
 
             return response()->json([
                 'status' => 'error',
@@ -41,6 +160,7 @@ class CreateRequestController extends Controller
             ], 500);
         }
     }
+
 
     public function store(Request $request)
     {
@@ -148,41 +268,73 @@ class CreateRequestController extends Controller
 
                 Log::info("Workflow Found", $workflow->toArray());
 
-                // 1. Get all workflow steps in correct order
+                // Get all workflow steps
                 $steps = WorkflowStep::where('workflow_id', $workflow->id)
                     ->orderBy('order_id', 'asc')
                     ->get();
 
                 foreach ($steps as $step) {
 
-                    // 2. Get the role assigned for this step
+                    // Get assigned roles for each step
                     $roles = WorkflowRoleAssign::where('workflow_id', $workflow->id)
                         ->where('step_id', $step->id)
                         ->get();
 
-                    foreach ($roles as $role) {
+                    foreach ($roles as $roleAssign) {
 
-                        // 3. Insert in required format
-                        RequestWorkflowDetails::create([
-                            'request_id'        => $req->request_id,
-                            'workflow_id'       => $workflow->id,
-                            'workflow_step_id'  => $step->id,
-                            'workflow_role_id'  => $role->role_id,
-                            'status'            => 'pending',
-                            'is_sendback'       => 0,
-                        ]);
+                        // ------------------ NEW LOGIC FOR USER ASSIGNMENT ------------------ //
+
+                        // SINGLE → specific user selected
+                        if (
+                            $roleAssign->approval_logic === 'single' &&
+                            $roleAssign->specific_user == 0 &&
+                            $roleAssign->user_id
+                        ) {
+                            $users = collect([User::find($roleAssign->user_id)]);
+                        } else {
+                            // AND / OR / fallback → all role users
+                            $users = User::where('role_id', $roleAssign->role_id)->get();
+                        }
+
+                        // AND → create rows for ALL users
+                        if ($roleAssign->approval_logic === 'and') {
+
+                            foreach ($users as $u) {
+                                RequestWorkflowDetails::create([
+                                    'request_id'        => $req->request_id,
+                                    'workflow_id'       => $workflow->id,
+                                    'workflow_step_id'  => $step->id,
+                                    'workflow_role_id'  => $roleAssign->role_id,
+                                    'assigned_user_id'  => $u->id,
+                                    'status'            => 'pending',
+                                    'is_sendback'       => 0,
+                                ]);
+                            }
+                        }
+                        // SINGLE / OR → create only one row
+                        else {
+                            $assignedUser = $users->first();
+
+                            RequestWorkflowDetails::create([
+                                'request_id'        => $req->request_id,
+                                'workflow_id'       => $workflow->id,
+                                'workflow_step_id'  => $step->id,
+                                'workflow_role_id'  => $roleAssign->role_id,
+                                'assigned_user_id'  => $assignedUser ? $assignedUser->id : null,
+                                'status'            => 'pending',
+                                'is_sendback'       => 0,
+                            ]);
+                        }
 
                         Log::info("Workflow Detail Inserted", [
                             'request_id' => $req->request_id,
                             'workflow_id' => $workflow->id,
                             'step_id' => $step->id,
-                            'role_id' => $role->role_id
+                            'role_id' => $roleAssign->role_id
                         ]);
                     }
                 }
             }
-
-
 
             // ------------------------- FINAL RESPONSE ------------------------- //
             return response()->json([
@@ -471,9 +623,9 @@ class CreateRequestController extends Controller
         }
     }
 
-        public function myActionableRequests()
+    public function myActionableRequests()
     {
-        $user= Auth::user();
+        $user = Auth::user();
 
         $roleIds = $user->roles()->pluck('id');
 

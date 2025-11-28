@@ -17,12 +17,43 @@ class WorkFlow_RoleAssignController extends Controller
     public function index()
     {
         try {
-            $assignments = WorkflowRoleAssign::orderByDesc('id')->get();
+            // Eager load relationships
+            $assignments = WorkflowRoleAssign::with(['workflow', 'step', 'role', 'assignedUser'])
+                ->orderByDesc('id')
+                ->get();
+
+            // Transform the data to include both IDs and names
+            $data = $assignments->map(function ($assignment) {
+                return [
+                    'id' => $assignment->id,
+                    'workflow' => [
+                        'id' => $assignment->workflow_id,
+                        'name' => $assignment->workflow ? $assignment->workflow->name : null
+                    ],
+                    'step' => [
+                        'id' => $assignment->step_id,
+                        'name' => $assignment->step ? $assignment->step->name : null
+                    ],
+                    'role' => [
+                        'id' => $assignment->role_id,
+                        'name' => $assignment->role ? $assignment->role->name : null
+                    ],
+                    'approval_logic' => $assignment->approval_logic,
+                    'specific_user' => $assignment->specific_user,
+                    'user' => [
+                        'id' => $assignment->user_id,
+                        'name' => $assignment->assignedUser ? $assignment->assignedUser->name : null
+                    ],
+                    'remark' => $assignment->remark,
+                    'created_at' => $assignment->created_at,
+                    'updated_at' => $assignment->updated_at
+                ];
+            });
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow role assignments retrieved successfully.',
-                'data' => $assignments
+                'data' => $data
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -32,6 +63,7 @@ class WorkFlow_RoleAssignController extends Controller
             ], 500);
         }
     }
+
 
     /**
      * Store a new workflow role assignment.

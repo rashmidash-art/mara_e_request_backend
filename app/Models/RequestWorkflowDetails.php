@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class RequestWorkflowDetails extends Model
 {
     use HasFactory;
-    protected $fillable = ['request_id', 'workflow_id', 'workflow_step_id', 'workflow_role_id', 'action_taken_by', 'remark', 'status', 'is_sendback', 'sendback_remark'];
+    protected $fillable = ['request_id', 'workflow_id', 'workflow_step_id', 'workflow_role_id', 'action_taken_by', 'remark', 'status', 'is_sendback', 'sendback_remark', 'assigned_user_id'];
 
 
     /** Request header info */
@@ -33,5 +33,10 @@ class RequestWorkflowDetails extends Model
     public function role()
     {
         return $this->belongsTo(Role::class, 'workflow_role_id', 'id');
+    }
+
+    public function assignedUser()
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id', 'id');
     }
 }

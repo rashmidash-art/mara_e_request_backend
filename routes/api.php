@@ -63,6 +63,9 @@ Route::middleware('auth:api,entiti-api')->group(function () {
 
     Route::middleware(['permission'])->group(function () {
         Route::apiResource('request', controller: CreateRequestController::class);
+
+        Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
+        Route::post('/requests/action', [RequestWorkflowDetailsController::class, 'takeAction']);
     });
     Route::middleware(['auth:api,entiti-api', 'permission'])->group(function () {
         Route::apiResource('roles', RoleController::class);
@@ -122,7 +125,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
             'myActionableRequests'
         ]);
         Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
-        Route::post('/requests/action', [RequestWorkflowDetailsController::class, 'takeAction']);
+        Route::post('/request-workflow/{request_id}/action', [RequestWorkflowDetailsController::class, 'takeAction']);
     });
 
 

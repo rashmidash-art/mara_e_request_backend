@@ -34,4 +34,23 @@ class WorkflowRoleAssign extends Model
     {
         return $this->belongsTo(Role::class, 'role_id', 'id');
     }
+
+
+    public function assignedUser()
+    {
+        return $this->belongsTo(User::class, 'user_id', 'id');
+    }
+
+    public function requestHeader()
+    {
+        return $this->belongsTo(Request::class, 'request_id', 'request_id')
+            ->with([
+                'userData',
+                'entityData',
+                'requestTypeData',
+                'categoryData',
+                'departmentData',
+                'supplierData'
+            ]);
+    }
 }

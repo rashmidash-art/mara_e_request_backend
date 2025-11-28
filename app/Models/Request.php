@@ -28,4 +28,47 @@ class Request extends Model
         'business_justification',
         'status'
     ];
+
+    public function currentWorkflowRole()
+    {
+        return $this->hasOne(RequestWorkflowDetails::class, 'request_id', 'request_id')
+            ->latest('id') // get latest workflow step
+            ->with('role');
+    }
+
+
+    public function entityData()
+    {
+        return $this->belongsTo(Entiti::class, 'entiti');
+    }
+
+    public function userData()
+    {
+        return $this->belongsTo(User::class, 'user');
+    }
+
+    public function requestTypeData()
+    {
+        return $this->belongsTo(RequestType::class, 'request_type');
+    }
+
+    public function categoryData()
+    {
+        return $this->belongsTo(Category::class, 'category');
+    }
+
+    public function departmentData()
+    {
+        return $this->belongsTo(Department::class, 'department');
+    }
+
+    public function supplierData()
+    {
+        return $this->belongsTo(Supplier::class, 'supplier_id');
+    }
+
+    public function documents()
+    {
+        return $this->hasMany(RequestDocument::class, 'request_id', 'request_id');
+    }
 }
