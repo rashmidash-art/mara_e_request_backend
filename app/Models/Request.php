@@ -29,12 +29,31 @@ class Request extends Model
         'status'
     ];
 
+    // public function currentWorkflowRole()
+    // {
+    //     return $this->hasOne(RequestWorkflowDetails::class, 'request_id', 'request_id')
+    //         ->latest('id') // get latest workflow step
+    //         ->with('role');
+    // }
+
     public function currentWorkflowRole()
     {
         return $this->hasOne(RequestWorkflowDetails::class, 'request_id', 'request_id')
-            ->latest('id') // get latest workflow step
-            ->with('role');
+            ->latest('id');
     }
+
+    public function pendingWorkflowRoles()
+    {
+        return $this->hasMany(RequestWorkflowDetails::class, 'request_id', 'request_id')
+            ->where('status', 'pending')
+            ->with([
+                'workflowStep:id,name,order_id',
+                'role:id,name,display_name',
+                'assignedUser:id,name'
+            ])
+            ->orderBy('workflow_step_id', 'asc');
+    }
+
 
 
     public function entityData()

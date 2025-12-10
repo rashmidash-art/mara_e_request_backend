@@ -324,23 +324,30 @@ class UserController extends Controller
     public function show($id)
     {
         try {
-            $user = User::with('roles')->findOrFail($id);
+            // Fetch the user with their roles and permissions
+            $user = User::with('roles.permissions')->findOrFail($id);
+
+            // Manually extract permissions from the user's roles
+            $permissions = $user->roles->flatMap(function ($role) {
+                return $role->permissions->pluck('name');
+            })->unique()->values(); // Ensure unique permissions and reset array keys
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'User retrieved successfully',
-                'data' => $user
+                'data' => $user, // User data
+                'permissions' => $permissions, // Permissions of the user
             ], 200);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'User not found'
+                'message' => 'User not found',
             ], 404);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve user',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

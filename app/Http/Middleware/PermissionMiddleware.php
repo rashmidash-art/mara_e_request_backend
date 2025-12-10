@@ -113,13 +113,17 @@ class PermissionMiddleware
      */
     protected function resolvePermission(Request $request)
     {
+        // 1️⃣ If route has a name (recommended)
         $routeName = $request->route()->getName();
 
         if ($routeName) {
             $parts = explode('.', $routeName);
+
+            // apiResource generates names like "entities.index"
             $module = $parts[0] ?? 'unknown';
             $action = $parts[1] ?? '';
 
+            // Convert index/show → view, store → create, etc.
             $actionMap = [
                 'index'   => 'view',
                 'show'    => 'view',
@@ -133,13 +137,16 @@ class PermissionMiddleware
             return "{$module}.{$action}";
         }
 
-        // fallback
-        $routeUri = $request->route()->uri();
-        $routeUri = str_replace('api/', '', $routeUri);
-        $routeUri = preg_replace('/\{.*?\}/', '', $routeUri);
+        // 2️⃣ Fallback using URI
+        $uri = str_replace('api/', '', $request->route()->uri());
+        $segments = explode('/', trim($uri, '/'));
 
-        $segments = array_filter(explode('/', trim($routeUri, '/')));
         $module = $segments[0] ?? 'unknown';
+
+        // force plural (entity → entities)
+        if (!str_ends_with($module, 's')) {
+            $module .= 's';
+        }
 
         $methodMap = [
             'GET'    => 'view',
@@ -150,7 +157,6 @@ class PermissionMiddleware
         ];
 
         $action = $methodMap[$request->method()] ?? 'unknown';
-        $module = str_replace('_', '-', $module);
 
         return "{$module}.{$action}";
     }

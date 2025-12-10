@@ -38,7 +38,7 @@ class LoginController extends Controller
             Log::info('Password matched for user ID: ' . $user->id);
 
             try {
-                $token = $user->createToken('User table clientt')->accessToken;
+                $token = $user->createToken('User Token')->accessToken;
                 Log::info('Token created successfully for user ID: ' . $user->id);
             } catch (\Exception $e) {
                 Log::error(message: 'Token creation failed for user ID: ' . $user->id . ' Error: ' . $e->getMessage());
@@ -72,7 +72,7 @@ class LoginController extends Controller
             Log::info('Entity password from DB: ' . $entity->password);
             Log::info('Entity password from request: ' . $request->password);
             try {
-                $token = $entity->createToken('API Token', [], 'entiti-api')->accessToken;
+                $token = $entity->createToken('Entity Token')->accessToken;
                 Log::info('Token created successfully for entity: ' . $entity->id);
 
                 // Entity → all permissions except entities.*

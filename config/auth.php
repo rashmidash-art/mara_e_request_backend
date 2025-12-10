@@ -116,7 +116,7 @@ return [
         ],
 
 
-        'entitis' => [ // 👈 new broker
+        'entitis' => [ // new broker
             'provider' => 'entitis',
             'table' => 'password_reset_tokens',
             'expire' => 60,
