@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Entiti;
 use App\Models\Permission;
 use App\Models\User;
-use App\Models\Entiti;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -15,98 +15,138 @@ class LoginController extends Controller
     public function login(Request $request)
     {
         $request->validate([
-            'email'    => 'required|email',
-            'password' => 'required'
+            'email' => 'required|email',
+            'password' => 'required',
         ]);
 
-        // Check in users table first
+        // -----------------------------------------------
+        // 1️⃣ CHECK USER TABLE FIRST
+        // -----------------------------------------------
         $user = User::where('email', $request->email)->first();
-        Log::info('User found: ' . ($user ? $user->id : 'none'));
+        Log::info('User lookup: '.($user ? $user->id : 'not found'));
 
         if ($user) {
-            Log::info('Password from DB: ' . $user->password);
-            Log::info('Password from request: ' . $request->password);
 
-            if (!Hash::check($request->password, $user->password)) {
-                Log::warning('Password check failed for user ID: ' . $user->id);
+            if (! Hash::check($request->password, $user->password)) {
+                Log::warning("Password mismatch for user {$user->id}");
+
                 return response()->json([
-                    'status'  => 'error',
-                    'message' => 'Invalid credentials'
+                    'status' => 'error',
+                    'message' => 'Invalid credentials',
                 ], 401);
             }
 
-            Log::info('Password matched for user ID: ' . $user->id);
+            Log::info("Password matched for user {$user->id}");
 
             try {
-                $token = $user->createToken('User Token')->accessToken;
-                Log::info('Token created successfully for user ID: ' . $user->id);
+                $token = $user->createToken('User Token', [], 'auth')->accessToken;
             } catch (\Exception $e) {
-                Log::error(message: 'Token creation failed for user ID: ' . $user->id . ' Error: ' . $e->getMessage());
+                Log::error("Token creation failed for user {$user->id}: ".$e->getMessage());
+
                 return response()->json([
-                    'status'  => 'error',
+                    'status' => 'error',
                     'message' => 'Token creation failed',
-                    'error_message' => $e->getMessage(),
+                    'error' => $e->getMessage(),
                 ], 500);
             }
 
-            $permissions = $user->user_type == 0
-                ? Permission::pluck('name')->toArray() // Super Admin → all permissions
-                : $user->permissions()->pluck('name')->toArray(); // Normal user → assigned permissions
+            // -------------------------
+            // Permissions for USERS
+            // -------------------------
+            if ($user->user_type == 0) {
+                // Super Admin → all permissions
+                $permissions = Permission::pluck('name')->toArray();
+            } else {
+                // Normal user → permissions through roles
+                $permissions = $user->permissions()->toArray();
+            }
+
+            $entityName = null;
+            if ($user->entiti_id) {
+                $entity = $user->entity;  // using relationship
+                $entityName = $entity ? $entity->name : null;
+            }
 
             return response()->json([
-                'status'       => 'success',
-                'type'         => $user->user_type == 0 ? 'superadmin' : 'user',
-                'user'         => $user,
-                'token'        => $token,
-                'permissions'  => $permissions,
-                'entity_scope' => null,
+                'status' => 'success',
+                'type' => $user->user_type == 0 ? 'superadmin' : 'user',
+                'user' => $user,
+                'entity_name' => $entityName,
+                'token' => $token,
+                'permissions' => $permissions,
+                'entity_scope' => $user->entiti_id,
             ], 200);
         }
 
-
-        // Check in entitis table
+        // -----------------------------------------------
+        // 2️⃣ CHECK ENTITY TABLE (entitis)
+        // -----------------------------------------------
         $entity = Entiti::where('email', $request->email)->first();
-        Log::info('Entity found: ' . ($entity ? $entity->id : 'none'));
+        Log::info('Entity lookup: '.($entity ? $entity->id : 'not found'));
 
-        if ($entity && Hash::check($request->password, $entity->password)) {
-            Log::info('Entity password from DB: ' . $entity->password);
-            Log::info('Entity password from request: ' . $request->password);
-            try {
-                $token = $entity->createToken('Entity Token')->accessToken;
-                Log::info('Token created successfully for entity: ' . $entity->id);
+        if ($entity) {
 
-                // Entity → all permissions except entities.*
-                $permissions = Permission::where('name', 'entities.view')->pluck('name')->toArray();
+            if (! Hash::check($request->password, $entity->password)) {
+                Log::warning("Password mismatch for entity {$entity->id}");
 
-
-                return response()->json([
-                    'status'       => 'success',
-                    'type'         => 'entity',
-                    'user'         => $entity,
-                    'token'        => $token,
-                    'permissions'  => $permissions,
-                    'entity_scope' => $entity->id, // Limit data access to this entity
-                ], 200);
-            } catch (\Exception $e) {
-                Log::error('Token creation failed: ' . $e->getMessage());
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Token creation failed'
+                    'message' => 'Invalid credentials',
+                ], 401);
+            }
+
+            Log::info("Entity password matched for entity {$entity->id}");
+
+            try {
+                $token = $entity->createToken('Entity Token', [], 'entiti-api')->accessToken;
+            } catch (\Exception $e) {
+                Log::error('Entity token creation failed: '.$e->getMessage());
+
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Token creation failed',
                 ], 500);
             }
+
+            // -------------------------
+            // Permissions for ENTITY USERS
+            // Allowed only → entities.view
+            // -------------------------
+            $permissions = [
+                'entities.view',
+            ];
+
+            return response()->json([
+                'status' => 'success',
+                'type' => 'entity',
+                'user' => $entity,
+                'token' => $token,
+                'permissions' => $permissions,
+                'entity_scope' => $entity->id,
+                'entity_name'  => $entity->name,
+                // scope only its own data
+            ], 200);
         }
 
-        // If neither user nor entity matched
-        return response()->json(['status' => 'error', 'message' => 'Invalid credentials'], 401);
+        // -----------------------------------------------
+        // 3️⃣ INVALID LOGIN
+        // -----------------------------------------------
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Invalid credentials',
+        ], 401);
     }
 
+    // ----------------------------------------------------
+    // LOGOUT
+    // ----------------------------------------------------
     public function logout(Request $request)
     {
         $request->user()->tokens()->delete();
 
         return response()->json([
-            'status'  => 'success',
-            'message' => 'Logged out successfully'
+            'status' => 'success',
+            'message' => 'Logged out successfully',
         ]);
     }
 }

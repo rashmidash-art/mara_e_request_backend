@@ -28,7 +28,7 @@ class PermissionMiddleware
         ]);
 
         // ======================================
-        // ✅ 1. SUPER ADMIN → FULL ACCESS
+        //  1. SUPER ADMIN → FULL ACCESS
         // ======================================
         if ($user instanceof User && $user->user_type === 0) {
             Log::info("🟢 SUPER ADMIN bypass");
@@ -36,7 +36,7 @@ class PermissionMiddleware
         }
 
         // ======================================
-        // ✅ 2. ENTITY USER (entiti-api)
+        //  2. ENTITY USER (entiti-api)
         // ======================================
         if ($user instanceof Entiti) {
 
@@ -71,7 +71,7 @@ class PermissionMiddleware
         }
 
         // ======================================
-        // ✅ 3. NORMAL USER (Admin)
+        //  3. NORMAL USER (Admin)
         // ======================================
         if ($user instanceof User) {
 
