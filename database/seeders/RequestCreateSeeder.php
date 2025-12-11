@@ -20,22 +20,22 @@ class RequestCreateSeeder extends Seeder
                 'description'  => 'Allows viewing requests',
             ],
             [
-                'name' => 'requests.create',
+                'name' => 'request.create',
                 'display_name' => 'Create Requests',
                 'description'  => 'Allows creating new requests',
             ],
             [
-                'name' => 'requests.update',
+                'name' => 'request.update',
                 'display_name' => 'Update Requests',
                 'description'  => 'Allows updating existing requests',
             ],
             [
-                'name' => 'requests.approve',
+                'name' => 'request.approve',
                 'display_name' => 'Approve Requests',
                 'description'  => 'Allows approving requests',
             ],
             [
-                'name' => 'requests.delete',
+                'name' => 'request.delete',
                 'display_name' => 'Delete Requests',
                 'description'  => 'Allows deleting requests',
             ],
@@ -53,6 +53,6 @@ class RequestCreateSeeder extends Seeder
             );
         }
 
-        echo "✅ Request permissions seeded successfully!\n";
+        echo " Request permissions seeded successfully!\n";
     }
 }

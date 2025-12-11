@@ -3,35 +3,33 @@
 use App\Http\Controllers\Admin\BudgetController;
 use App\Http\Controllers\Admin\CategoreController;
 use App\Http\Controllers\Admin\CreateRequestController;
+use App\Http\Controllers\Admin\DeprtmentController;
 use App\Http\Controllers\Admin\DocumentController;
 use App\Http\Controllers\Admin\EntitiesController;
 use App\Http\Controllers\Admin\FileFormatController;
 use App\Http\Controllers\Admin\ManagerController;
 use App\Http\Controllers\Admin\RequestTypeController;
+use App\Http\Controllers\Admin\RequestWorkflowDetailsController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\RolePermissionController;
 use App\Http\Controllers\Admin\SupplierController;
+use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WorkFlow_RoleAssignController;
 use App\Http\Controllers\Admin\WorkFlowController;
-use App\Http\Controllers\Auth\LoginController;
-use App\Http\Controllers\Auth\PasswordResetContrller;
-use App\Http\Controllers\Admin\DeprtmentController;
-use App\Http\Controllers\Admin\RequestController;
-use App\Http\Controllers\Admin\RequestWorkflowDetailsController;
-use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WorkFlowStepsController;
 use App\Http\Controllers\Admin\WorkFlowTypeController;
+use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\PasswordResetContrller;
 // use App\Http\Controllers\CategoryController as ControllersCategoryController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-
-
 
 Route::post('admin/login', [LoginController::class, 'login']);
 
 Route::post('password/forgot', [PasswordResetContrller::class, 'sendResetLink']);
 Route::post('password/reset', [PasswordResetContrller::class, 'reset']);
 
+Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
 
 Route::middleware('auth:api,entiti-api')->group(function () {
     Route::get('budgets', [BudgetController::class, 'index']);
@@ -51,7 +49,6 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::get('entity/itself', [EntitiesController::class, 'itself']);
     });
 
-
     Route::middleware(['auth:api'])->group(function () {
         Route::get('user/{id}/loa', action: [BudgetController::class, 'getLoaByUser']);
     });
@@ -59,7 +56,6 @@ Route::middleware('auth:api,entiti-api')->group(function () {
     Route::middleware(['auth:api,entiti-api', 'permission'])->group(function () {
         Route::apiResource('entities', EntitiesController::class);
     });
-
 
     Route::middleware(['permission'])->group(function () {
         Route::apiResource('request', controller: CreateRequestController::class);
@@ -112,22 +108,19 @@ Route::middleware('auth:api,entiti-api')->group(function () {
 
         Route::get('/workflowbyTypeandCat', [WorkFlowController::class, 'getWorkflowByTypeAndCategory']);
 
-
-
         // routes/api.php
         Route::apiResource('supplier', controller: SupplierController::class);
         Route::apiResource('fileformat', FileFormatController::class);
         Route::apiResource('document', DocumentController::class);
-        Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
+        // Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
         Route::apiResource('request', controller: CreateRequestController::class);
         Route::get('/requests/actionable', [
             CreateRequestController::class,
-            'myActionableRequests'
+            'myActionableRequests',
         ]);
         Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
         Route::post('/request-workflow/{request_id}/action', [RequestWorkflowDetailsController::class, 'takeAction']);
     });
-
 
     // Route::middleware(['auth', 'role:admin'])->group(function () {
     //     Route::apiResource('roles', RoleController::class);

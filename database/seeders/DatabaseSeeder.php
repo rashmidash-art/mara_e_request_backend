@@ -22,9 +22,9 @@ class DatabaseSeeder extends Seeder
         // $this->call(ManagerSeeder::class);
         // $this->call(RequestSeeder::class);
         // $this->call(AddEntityViewPermissionSeeder::class);
-        // $this->call(DeleteRequestPermissionsSeeder::class);
-        // $this->call(RequestCreateSeeder::class);
-        // $this->call(RequestTypeSeeder::class);
+        $this->call(DeleteRequestPermissionsSeeder::class);
+        $this->call(RequestCreateSeeder::class);
+        $this->call(RequestTypeSeeder::class);
         $this->call(RequestWorkflowSeeder::class);
     }
 }
