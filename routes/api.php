@@ -29,6 +29,7 @@ Route::post('admin/login', [LoginController::class, 'login']);
 Route::post('password/forgot', [PasswordResetContrller::class, 'sendResetLink']);
 Route::post('password/reset', [PasswordResetContrller::class, 'reset']);
 
+// Need to configure
 Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
 
 Route::middleware('auth:api,entiti-api')->group(function () {
@@ -51,6 +52,9 @@ Route::middleware('auth:api,entiti-api')->group(function () {
 
     Route::middleware(['auth:api'])->group(function () {
         Route::get('user/{id}/loa', action: [BudgetController::class, 'getLoaByUser']);
+
+        Route::get('/requestDetails', [CreateRequestController::class, 'requestDetailsAll']);
+
     });
 
     Route::middleware(['auth:api,entiti-api', 'permission'])->group(function () {
@@ -69,7 +73,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::post('roles/remove', [RoleController::class, 'removeRole']);
         Route::get('roles/{id}/users', [RoleController::class, 'getUsersByRole']);
         // -----------------------------
-        // 🔒 Role Permission Management
+        //  Role Permission Management
         // -----------------------------
 
         Route::get('allpermissions', [RolePermissionController::class, 'allpermissions']);
@@ -118,6 +122,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
             CreateRequestController::class,
             'myActionableRequests',
         ]);
+
         Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
         Route::post('/request-workflow/{request_id}/action', [RequestWorkflowDetailsController::class, 'takeAction']);
     });

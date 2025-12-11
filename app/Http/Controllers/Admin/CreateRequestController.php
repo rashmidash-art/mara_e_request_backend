@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
-use Illuminate\Http\Request;
 use App\Models\Document;
 use App\Models\Entiti;
 use App\Models\Request as ModelsRequest;
@@ -14,6 +13,7 @@ use App\Models\User;
 use App\Models\WorkFlow;
 use App\Models\WorkflowRoleAssign;
 use App\Models\WorkflowStep;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -29,8 +29,8 @@ class CreateRequestController extends Controller
             $auth = Auth::user();
 
             // Detect login types
-            $isEntityLogin  = $auth instanceof Entiti;
-            $isSuperAdmin   = !$isEntityLogin && isset($auth->user_type) && $auth->user_type == 0;
+            $isEntityLogin = $auth instanceof Entiti;
+            $isSuperAdmin = ! $isEntityLogin && isset($auth->user_type) && $auth->user_type == 0;
 
             // -----------------------------------------------
             // Base Query (ONLY REQUEST TABLE)
@@ -55,7 +55,7 @@ class CreateRequestController extends Controller
                 },
                 'currentWorkflowRole.role:id,name',
                 'currentWorkflowRole.assignedUser:id,name',
-                'currentWorkflowRole.workflowStep:id,name'
+                'currentWorkflowRole.workflowStep:id,name',
             ])->orderByDesc('id');
 
             // -----------------------------------------------
@@ -90,39 +90,38 @@ class CreateRequestController extends Controller
                 $workflow = $req->currentWorkflowRole;
 
                 return [
-                    'request_id'   => $req->request_id,
-                    'amount'       => $req->amount,
-                    'priority'     => $req->priority,
-                    'description'  => $req->description,
-                    'status'       => $req->status,
-                    'created_at'   => $req->created_at?->format('Y-m-d H:i:s'),
+                    'request_id' => $req->request_id,
+                    'amount' => $req->amount,
+                    'priority' => $req->priority,
+                    'description' => $req->description,
+                    'status' => $req->status,
+                    'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
 
                     'category' => [
-                        'id'   => $req->category,
+                        'id' => $req->category,
                         'name' => $req->categoryData?->name,
                     ],
 
                     'entity' => [
-                        'id'   => $req->entiti,
+                        'id' => $req->entiti,
                         'name' => $req->entityData?->name,
                     ],
 
                     'requested_by' => [
-                        'id'   => $req->user,
+                        'id' => $req->user,
                         'name' => $req->userData?->name,
                     ],
 
                     'request_type' => [
-                        'id'   => $req->request_type,
+                        'id' => $req->request_type,
                         'name' => $req->requestTypeData?->name,
                     ],
 
-
                     'workflow' => [
-                        'step'          => $workflow?->workflowStep?->name,
-                        'role'          => $workflow?->role?->name,
+                        'step' => $workflow?->workflowStep?->name,
+                        'role' => $workflow?->role?->name,
                         'assigned_user' => $workflow?->assignedUser?->name,
-                        'status'        => $workflow?->status,
+                        'status' => $workflow?->status,
                     ],
 
                     // Include documents with only document_id and document name
@@ -139,28 +138,27 @@ class CreateRequestController extends Controller
 
                         return [
                             'document_id' => $doc->document_id,
-                            'document'    => $filename
+                            'document' => $filename,
                         ];
                     }),
                 ];
             });
 
             return response()->json([
-                'status'  => 'success',
-                'data'    => $data
+                'status' => 'success',
+                'data' => $data,
             ]);
         } catch (\Exception $e) {
 
-            Log::error('Request index failed: ' . $e->getMessage());
+            Log::error('Request index failed: '.$e->getMessage());
 
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to fetch requests',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     public function store(Request $request)
     {
@@ -168,24 +166,24 @@ class CreateRequestController extends Controller
 
             // ------------------------- VALIDATION ------------------------- //
             $validated = $request->validate([
-                'entiti'                => 'nullable|integer',
-                'user'                  => 'nullable|integer',
-                'request_type'          => 'nullable|integer',
-                'category'              => 'nullable|integer',
-                'department'            => 'nullable|integer',
-                'amount'                => 'nullable|string',
-                'description'           => 'nullable|string',
-                'supplier_id'           => 'nullable|integer',
-                'expected_date'         => 'nullable|string',
-                'priority'              => 'nullable|string',
-                'behalf_of'             => 'nullable|in:0,1',
-                'behalf_of_department'  => 'required_if:behalf_of,1',
+                'entiti' => 'nullable|integer',
+                'user' => 'nullable|integer',
+                'request_type' => 'nullable|integer',
+                'category' => 'nullable|integer',
+                'department' => 'nullable|integer',
+                'amount' => 'nullable|string',
+                'description' => 'nullable|string',
+                'supplier_id' => 'nullable|integer',
+                'expected_date' => 'nullable|string',
+                'priority' => 'nullable|string',
+                'behalf_of' => 'nullable|in:0,1',
+                'behalf_of_department' => 'required_if:behalf_of,1',
                 'business_justification' => 'nullable|string',
-                'status'                => 'nullable|in:submitted,draft,deleted',
+                'status' => 'nullable|in:submitted,draft,deleted',
 
-                'attachments'                  => 'nullable|array',
-                'attachments.*.document_id'    => 'required|integer',
-                'attachments.*.file'           => 'required|file|max:10240',
+                'attachments' => 'nullable|array',
+                'attachments.*.document_id' => 'required|integer',
+                'attachments.*.file' => 'required|file|max:10240',
             ]);
 
             // ------------------------- CREATE REQUEST ID ------------------------- //
@@ -195,37 +193,38 @@ class CreateRequestController extends Controller
                 ->first();
 
             $nextNumber = $last ? $last->id + 1 : 1;
-            $request_no = "REQ-{$year}-" . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
+            $request_no = "REQ-{$year}-".str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
 
             // ------------------------- INSERT REQUEST MASTER ------------------------- //
             $req = ModelsRequest::create([
-                'request_id'             => $request_no,
-                'entiti'                 => $request->entiti,
-                'user'                   => $request->user,
-                'request_type'           => $request->request_type,
-                'category'               => $request->category,
-                'department'             => $request->department,
-                'amount'                 => $request->amount,
-                'description'            => $request->description,
-                'supplier_id'            => $request->supplier_id,
-                'expected_date'          => $request->expected_date,
-                'priority'               => $request->priority,
-                'behalf_of'              => $request->behalf_of,
-                'behalf_of_department'   => $request->behalf_of_department,
+                'request_id' => $request_no,
+                'entiti' => $request->entiti,
+                'user' => $request->user,
+                'request_type' => $request->request_type,
+                'category' => $request->category,
+                'department' => $request->department,
+                'amount' => $request->amount,
+                'description' => $request->description,
+                'supplier_id' => $request->supplier_id,
+                'expected_date' => $request->expected_date,
+                'priority' => $request->priority,
+                'behalf_of' => $request->behalf_of,
+                'behalf_of_department' => $request->behalf_of_department,
                 'business_justification' => $request->business_justification,
-                'status'                 => $request->status ?? 'draft'
+                'status' => $request->status ?? 'draft',
             ]);
 
-            Log::info("Request Created:", ['request_id' => $req->request_id]);
-
+            Log::info('Request Created:', ['request_id' => $req->request_id]);
 
             // ------------------------- HANDLE ATTACHMENTS ------------------------- //
-            if (!empty($request->attachments)) {
+            if (! empty($request->attachments)) {
 
                 foreach ($request->attachments as $index => $doc) {
 
                     $file = $request->file("attachments.$index.file");
-                    if (!$file) continue;
+                    if (! $file) {
+                        continue;
+                    }
 
                     $originalName = $file->getClientOriginalName();
 
@@ -233,21 +232,21 @@ class CreateRequestController extends Controller
                     $departmentName = str_replace(' ', '_', strtolower($departmentName));
 
                     // final filename = REQ-XXXX_entiti_dept_filename
-                    $newFileName = $req->request_id . "_" .
-                        $req->entiti . "_" .
-                        $departmentName . "_" .
+                    $newFileName = $req->request_id.'_'.
+                        $req->entiti.'_'.
+                        $departmentName.'_'.
                         $originalName;
 
-                    $folder = "requestdocuments"; // single folder
+                    $folder = 'requestdocuments'; // single folder
 
                     // store file
                     $file->storeAs($folder, $newFileName, 'public');
 
                     // insert into DB
                     RequestDocument::create([
-                        'request_id'  => $req->request_id,
+                        'request_id' => $req->request_id,
                         'document_id' => $doc['document_id'],
-                        'document'    => $newFileName,
+                        'document' => $newFileName,
                     ]);
                 }
             }
@@ -266,7 +265,7 @@ class CreateRequestController extends Controller
 
             if ($workflow) {
 
-                Log::info("Workflow Found", $workflow->toArray());
+                Log::info('Workflow Found', $workflow->toArray());
 
                 // Get all workflow steps
                 $steps = WorkflowStep::where('workflow_id', $workflow->id)
@@ -301,13 +300,13 @@ class CreateRequestController extends Controller
 
                             foreach ($users as $u) {
                                 RequestWorkflowDetails::create([
-                                    'request_id'        => $req->request_id,
-                                    'workflow_id'       => $workflow->id,
-                                    'workflow_step_id'  => $step->id,
-                                    'workflow_role_id'  => $roleAssign->role_id,
-                                    'assigned_user_id'  => $u->id,
-                                    'status'            => 'pending',
-                                    'is_sendback'       => 0,
+                                    'request_id' => $req->request_id,
+                                    'workflow_id' => $workflow->id,
+                                    'workflow_step_id' => $step->id,
+                                    'workflow_role_id' => $roleAssign->role_id,
+                                    'assigned_user_id' => $u->id,
+                                    'status' => 'pending',
+                                    'is_sendback' => 0,
                                 ]);
                             }
                         }
@@ -316,21 +315,21 @@ class CreateRequestController extends Controller
                             $assignedUser = $users->first();
 
                             RequestWorkflowDetails::create([
-                                'request_id'        => $req->request_id,
-                                'workflow_id'       => $workflow->id,
-                                'workflow_step_id'  => $step->id,
-                                'workflow_role_id'  => $roleAssign->role_id,
-                                'assigned_user_id'  => $assignedUser ? $assignedUser->id : null,
-                                'status'            => 'pending',
-                                'is_sendback'       => 0,
+                                'request_id' => $req->request_id,
+                                'workflow_id' => $workflow->id,
+                                'workflow_step_id' => $step->id,
+                                'workflow_role_id' => $roleAssign->role_id,
+                                'assigned_user_id' => $assignedUser ? $assignedUser->id : null,
+                                'status' => 'pending',
+                                'is_sendback' => 0,
                             ]);
                         }
 
-                        Log::info("Workflow Detail Inserted", [
+                        Log::info('Workflow Detail Inserted', [
                             'request_id' => $req->request_id,
                             'workflow_id' => $workflow->id,
                             'step_id' => $step->id,
-                            'role_id' => $roleAssign->role_id
+                            'role_id' => $roleAssign->role_id,
                         ]);
                     }
                 }
@@ -340,16 +339,16 @@ class CreateRequestController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Request created successfully',
-                'data' => $req
+                'data' => $req,
             ], 201);
         } catch (\Exception $e) {
 
-            Log::error("Request Store Error", ['error' => $e->getMessage()]);
+            Log::error('Request Store Error', ['error' => $e->getMessage()]);
 
             return response()->json([
                 'status' => 'error',
                 'message' => 'Something went wrong',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -446,9 +445,6 @@ class CreateRequestController extends Controller
     //             }
     //         }
 
-
-
-
     //         return response()->json([
     //             'status' => 'success',
     //             'message' => 'Request created successfully',
@@ -467,17 +463,16 @@ class CreateRequestController extends Controller
     //     }
     // }
 
-
     /** Show single request */
     public function show($id)
     {
         try {
             $req = ModelsRequest::find($id);
 
-            if (!$req) {
+            if (! $req) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Request not found'
+                    'message' => 'Request not found',
                 ], 404);
             }
 
@@ -488,16 +483,16 @@ class CreateRequestController extends Controller
                 'message' => 'Request details retrieved',
                 'data' => [
                     'request' => $req,
-                    'documents' => $documents
-                ]
+                    'documents' => $documents,
+                ],
             ], 200);
         } catch (\Exception $e) {
-            Log::error("Request Fetch Error", ['error' => $e->getMessage()]);
+            Log::error('Request Fetch Error', ['error' => $e->getMessage()]);
 
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to fetch request',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -507,10 +502,10 @@ class CreateRequestController extends Controller
     {
         $req = ModelsRequest::find($id);
 
-        if (!$req) {
+        if (! $req) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Request not found'
+                'message' => 'Request not found',
             ], 404);
         }
 
@@ -533,13 +528,13 @@ class CreateRequestController extends Controller
 
             'documents' => 'nullable|array',
             'documents.*.document_id' => 'required|integer',
-            'documents.*.file' => 'required|file'
+            'documents.*.file' => 'required|file',
         ]);
 
         if ($request->behalf_of == 1 && empty($request->behalf_of_department)) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'behalf_of_department is required when behalf_of is 1'
+                'message' => 'behalf_of_department is required when behalf_of is 1',
             ], 422);
         }
 
@@ -563,12 +558,12 @@ class CreateRequestController extends Controller
                     $file = $doc['file'];
                     $originalName = $file->getClientOriginalName();
 
-                    $file->storeAs("uploads/request_documents/", $originalName, 'public');
+                    $file->storeAs('uploads/request_documents/', $originalName, 'public');
 
                     RequestDocument::create([
                         'request_id' => $req->id,
                         'document_id' => $doc['document_id'],
-                        'documnet' => $originalName
+                        'documnet' => $originalName,
                     ]);
                 }
             }
@@ -578,16 +573,16 @@ class CreateRequestController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Request updated successfully',
-                'data' => $req
+                'data' => $req,
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("Request Update Failed", ['error' => $e->getMessage()]);
+            Log::error('Request Update Failed', ['error' => $e->getMessage()]);
 
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update request',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -598,10 +593,10 @@ class CreateRequestController extends Controller
         try {
             $req = ModelsRequest::find($id);
 
-            if (!$req) {
+            if (! $req) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Request not found'
+                    'message' => 'Request not found',
                 ], 404);
             }
 
@@ -610,15 +605,15 @@ class CreateRequestController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Request deleted successfully'
+                'message' => 'Request deleted successfully',
             ], 200);
         } catch (\Exception $e) {
-            Log::error("Request Delete Failed", ['error' => $e->getMessage()]);
+            Log::error('Request Delete Failed', ['error' => $e->getMessage()]);
 
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete request',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -637,7 +632,150 @@ class CreateRequestController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data' => $requests
+            'data' => $requests,
         ]);
+    }
+
+    public function requestDetailsAll(Request $request)
+    {
+        try {
+            $auth = Auth::user();
+            $userId = $auth->id;
+            $isEntityLogin = $auth instanceof Entiti;
+            $isSuperAdmin = (! $isEntityLogin && isset($auth->user_type) && $auth->user_type == 0);
+            
+            $baseQuery = ModelsRequest::with([
+                'categoryData:id,name',
+                'entityData:id,name',
+                'userData:id,name',
+                'requestTypeData:id,name',
+                'departmentData:id,name',
+                'supplierData:id,name',
+                'documents:id,request_id,document_id,document',
+                'currentWorkflowRole' => function ($q) {
+                    $q->select('id', 'request_id', 'workflow_role_id', 'assigned_user_id', 'status', 'workflow_step_id');
+                },
+                'currentWorkflowRole.role:id,name',
+                'currentWorkflowRole.assignedUser:id,name',
+                'currentWorkflowRole.workflowStep:id,name',
+            ]);
+
+            // --------------------------------------------------
+            // Fetch data based on login type
+            // --------------------------------------------------
+            if ($isSuperAdmin) {
+                // Super Admin → all requests
+                $requests = $baseQuery->orderByDesc('id')->get();
+            } elseif ($isEntityLogin) {
+                // Entity → only requests of that entity
+                $requests = $baseQuery->where('entiti', $auth->id)
+                    ->orderByDesc('id')
+                    ->get();
+            } else {
+                // Normal User → only requests created by him OR assigned to him in workflow
+                $requests = $baseQuery->where(function ($q) use ($userId) {
+                    $q->where('user', $userId)
+                        ->orWhereHas('currentWorkflowRole', function ($w) use ($userId) {
+                            $w->where('assigned_user_id', $userId)
+                                ->where('status', 'pending');
+                        });
+                })->orderByDesc('id')->get();
+            }
+
+            // --------------------------------------------------
+            // Counts
+            // --------------------------------------------------
+            $countQuery = ModelsRequest::query();
+
+            if ($isSuperAdmin) {
+                // all requests
+            } elseif ($isEntityLogin) {
+                $countQuery->where('entiti', $auth->id);
+            } else {
+                $countQuery->where(function ($q) use ($userId) {
+                    $q->where('user', $userId)
+                        ->orWhereHas('currentWorkflowRole', function ($w) use ($userId) {
+                            $w->where('assigned_user_id', $userId)
+                                ->where('status', 'pending');
+                        });
+                });
+            }
+
+            $counts = [
+                'total' => $countQuery->count(),
+                'draft' => $countQuery->clone()->where('status', 'draft')->count(),
+                'submitted' => $countQuery->clone()->where('status', 'submitted')->count(),
+                'approved' => $countQuery->clone()->where('status', 'approved')->count(),
+                'rejected' => $countQuery->clone()->where('status', 'rejected')->count(),
+                'pending' => $countQuery->clone()->where('status', 'pending')->count(),
+            ];
+
+            // --------------------------------------------------
+            // Format response
+            // --------------------------------------------------
+            $data = $requests->map(function ($req) {
+                $workflow = $req->currentWorkflowRole;
+
+                return [
+                    'request_id' => $req->request_id,
+                    'amount' => $req->amount,
+                    'priority' => $req->priority,
+                    'description' => $req->description,
+                    'status' => $req->status,
+                    'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
+
+                    'category' => [
+                        'id' => $req->category,
+                        'name' => $req->categoryData?->name,
+                    ],
+
+                    'entity' => [
+                        'id' => $req->entiti,
+                        'name' => $req->entityData?->name,
+                    ],
+
+                    'requested_by' => [
+                        'id' => $req->user,
+                        'name' => $req->userData?->name,
+                    ],
+
+                    'request_type' => [
+                        'id' => $req->request_type,
+                        'name' => $req->requestTypeData?->name,
+                    ],
+
+                    'workflow' => [
+                        'step' => $workflow?->workflowStep?->name,
+                        'role' => $workflow?->role?->name,
+                        'assigned_user' => $workflow?->assignedUser?->name,
+                        'status' => $workflow?->status,
+                    ],
+
+                    'documents' => $req->documents->map(function ($doc) {
+                        $filename = last(explode('_', $doc->document));
+
+                        return [
+                            'document_id' => $doc->document_id,
+                            'document' => $filename,
+                        ];
+                    }),
+                ];
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'counts' => $counts,
+                'data' => $data,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Request index failed: '.$e->getMessage());
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch requests',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 }
