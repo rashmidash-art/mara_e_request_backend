@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Request extends Model
 {
@@ -26,7 +26,7 @@ class Request extends Model
         'behalf_of',
         'behalf_of_department',
         'business_justification',
-        'status'
+        'status',
     ];
 
     // public function currentWorkflowRole()
@@ -42,6 +42,13 @@ class Request extends Model
             ->latest('id');
     }
 
+    public function workflowUsers()
+    {
+        return $this->hasMany(RequestWorkflowDetails::class, 'request_id', 'request_id')
+            ->with('role', 'assignedUser', 'workflowStep')
+            ->orderBy('workflow_step_id', 'asc');
+    }
+
     public function pendingWorkflowRoles()
     {
         return $this->hasMany(RequestWorkflowDetails::class, 'request_id', 'request_id')
@@ -49,12 +56,10 @@ class Request extends Model
             ->with([
                 'workflowStep:id,name,order_id',
                 'role:id,name,display_name',
-                'assignedUser:id,name'
+                'assignedUser:id,name',
             ])
             ->orderBy('workflow_step_id', 'asc');
     }
-
-
 
     public function entityData()
     {
@@ -89,5 +94,66 @@ class Request extends Model
     public function documents()
     {
         return $this->hasMany(RequestDocument::class, 'request_id', 'request_id');
+    }
+
+    public function workflowDetails()
+    {
+        return $this->hasMany(RequestWorkflowDetails::class, 'request_id', 'request_id');
+    }
+
+    public function workflowHistory()
+    {
+        return $this->hasMany(RequestWorkflowDetails::class, 'request_id', 'request_id')
+            ->with(['role', 'assignedUser'])
+            ->orderBy('id', 'asc');  // Ensures full timeline step-by-step
+    }
+
+    public function getFinalStatus()
+{
+    // Get all workflow steps for the current request
+    $workflowSteps = $this->workflowUsers()
+        ->with('role:id,name')
+        ->orderBy('workflow_step_id', 'asc') // Order by workflow step
+        ->get();
+
+    // If no workflow steps exist, use the request's status directly
+    if ($workflowSteps->isEmpty()) {
+        return [
+            'final_status' => ucfirst($this->status), // Default status based on request's current status
+            'pending_by' => null,
+        ];
+    }
+
+    // If any workflow step has a status of 'rejected', the final status is 'Rejected'
+    if ($workflowSteps->contains('status', 'rejected')) {
+        return [
+            'final_status' => 'Rejected',
+            'pending_by' => null,
+        ];
+    }
+
+    // If any workflow step is still pending, the final status is 'Pending'
+    $firstPending = $workflowSteps->firstWhere('status', 'pending');
+    if ($firstPending) {
+        return [
+            'final_status' => 'Pending',
+            'pending_by' => $firstPending->role?->name ?? null, // Return the role of the person who is pending
+        ];
+    }
+
+    // If all workflow steps are approved, the final status is 'Approved'
+    if ($workflowSteps->every(fn ($step) => $step->status === 'approved')) {
+        return [
+            'final_status' => 'Approved',
+            'pending_by' => null,
+        ];
+    }
+
+    // Default fallback to the request's status
+    return [
+        'final_status' => ucfirst($this->status),
+        'pending_by' => null,
+    ];
+
     }
 }

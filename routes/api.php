@@ -37,9 +37,13 @@ Route::middleware('auth:api,entiti-api')->group(function () {
 });
 
 Route::middleware('auth:api,entiti-api')->group(function () {
+
+    Route::get('/requestDetails', [CreateRequestController::class, 'requestDetailsAll']);
+
     Route::post('admin/logout', [LoginController::class, 'logout']);
     Route::get('admin/user', function (Request $request) {
         return response()->json($request->user());
+
     });
     // -----------------------------
     // Roles Management (Dynamic CRUD)
@@ -53,7 +57,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
     Route::middleware(['auth:api'])->group(function () {
         Route::get('user/{id}/loa', action: [BudgetController::class, 'getLoaByUser']);
 
-        Route::get('/requestDetails', [CreateRequestController::class, 'requestDetailsAll']);
+        // Route::get('/requestDetails', [CreateRequestController::class, 'requestDetailsAll']);
 
     });
 
@@ -118,6 +122,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('document', DocumentController::class);
         // Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
         Route::apiResource('request', controller: CreateRequestController::class);
+        // Route::get('/requestDetails', [CreateRequestController::class, 'requestDetailsAll']);
         Route::get('/requests/actionable', [
             CreateRequestController::class,
             'myActionableRequests',

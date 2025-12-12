@@ -643,7 +643,8 @@ class CreateRequestController extends Controller
             $userId = $auth->id;
             $isEntityLogin = $auth instanceof Entiti;
             $isSuperAdmin = (! $isEntityLogin && isset($auth->user_type) && $auth->user_type == 0);
-            
+
+            // Fetching requests and their details
             $baseQuery = ModelsRequest::with([
                 'categoryData:id,name',
                 'entityData:id,name',
@@ -652,27 +653,17 @@ class CreateRequestController extends Controller
                 'departmentData:id,name',
                 'supplierData:id,name',
                 'documents:id,request_id,document_id,document',
-                'currentWorkflowRole' => function ($q) {
-                    $q->select('id', 'request_id', 'workflow_role_id', 'assigned_user_id', 'status', 'workflow_step_id');
+                'workflowHistory' => function ($q) {
+                    $q->with(['role', 'assignedUser', 'workflowStep'])->orderBy('id', 'asc');
                 },
-                'currentWorkflowRole.role:id,name',
-                'currentWorkflowRole.assignedUser:id,name',
-                'currentWorkflowRole.workflowStep:id,name',
             ]);
 
-            // --------------------------------------------------
-            // Fetch data based on login type
-            // --------------------------------------------------
+            // Different query logic based on user type
             if ($isSuperAdmin) {
-                // Super Admin → all requests
                 $requests = $baseQuery->orderByDesc('id')->get();
             } elseif ($isEntityLogin) {
-                // Entity → only requests of that entity
-                $requests = $baseQuery->where('entiti', $auth->id)
-                    ->orderByDesc('id')
-                    ->get();
+                $requests = $baseQuery->where('entiti', $auth->id)->orderByDesc('id')->get();
             } else {
-                // Normal User → only requests created by him OR assigned to him in workflow
                 $requests = $baseQuery->where(function ($q) use ($userId) {
                     $q->where('user', $userId)
                         ->orWhereHas('currentWorkflowRole', function ($w) use ($userId) {
@@ -682,16 +673,11 @@ class CreateRequestController extends Controller
                 })->orderByDesc('id')->get();
             }
 
-            // --------------------------------------------------
-            // Counts
-            // --------------------------------------------------
+            // Count query for pending, approved, and rejected workflow steps
             $countQuery = ModelsRequest::query();
-
-            if ($isSuperAdmin) {
-                // all requests
-            } elseif ($isEntityLogin) {
+            if ($isEntityLogin) {
                 $countQuery->where('entiti', $auth->id);
-            } else {
+            } elseif (! $isSuperAdmin) {
                 $countQuery->where(function ($q) use ($userId) {
                     $q->where('user', $userId)
                         ->orWhereHas('currentWorkflowRole', function ($w) use ($userId) {
@@ -707,14 +693,47 @@ class CreateRequestController extends Controller
                 'submitted' => $countQuery->clone()->where('status', 'submitted')->count(),
                 'approved' => $countQuery->clone()->where('status', 'approved')->count(),
                 'rejected' => $countQuery->clone()->where('status', 'rejected')->count(),
-                'pending' => $countQuery->clone()->where('status', 'pending')->count(),
+                'pending' => $countQuery->clone()->whereHas('workflowHistory', function ($query) {
+                    // Check for 'pending' status in the workflow history
+                    $query->where('status', 'pending');
+                })->count(),
             ];
 
-            // --------------------------------------------------
-            // Format response
-            // --------------------------------------------------
+            // Get total amount per user, per entity, and for the admin
+            $userTotalAmount = ModelsRequest::where('user', $userId)->sum('amount');
+
+            $entityTotalAmount = ModelsRequest::where('entiti', $auth->id)
+                ->sum('amount'); // If user is associated with an entity, calculate entity total
+
+            $adminTotalAmount = ModelsRequest::sum('amount'); // Admin total (all requests)
+
+            // Map through the requests and build the response data
             $data = $requests->map(function ($req) {
-                $workflow = $req->currentWorkflowRole;
+                $workflowHistory = $req->workflowHistory;
+
+                // Build the approval timeline with the first step as submission by the user
+                $approvalTimeline = collect([
+                    [
+                        'stage' => 'Submitted',
+                        'role' => 'You',
+                        'assigned_user' => $req->userData?->name ?? 'You',
+                        'status' => 'submitted',
+                        'date' => $req->created_at?->format('Y-m-d'),
+                    ],
+                ])->concat(
+                    $workflowHistory->map(function ($step) {
+                        return [
+                            'stage' => $step->workflowStep?->name ?? 'N/A',
+                            'role' => $step->role?->name ?? 'N/A',
+                            'assigned_user' => $step->assignedUser?->name ?? '—',
+                            'status' => $step->status,
+                            'date' => $step->updated_at?->format('Y-m-d') ?? '-',
+                        ];
+                    })
+                );
+
+                // Get the final status of the request based on its workflow steps
+                $finalStatus = $req->getFinalStatus();
 
                 return [
                     'request_id' => $req->request_id,
@@ -722,6 +741,8 @@ class CreateRequestController extends Controller
                     'priority' => $req->priority,
                     'description' => $req->description,
                     'status' => $req->status,
+                    'final_status' => $finalStatus['final_status'],
+                    'pending_by' => $finalStatus['pending_by'],
                     'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
 
                     'category' => [
@@ -744,12 +765,17 @@ class CreateRequestController extends Controller
                         'name' => $req->requestTypeData?->name,
                     ],
 
-                    'workflow' => [
-                        'step' => $workflow?->workflowStep?->name,
-                        'role' => $workflow?->role?->name,
-                        'assigned_user' => $workflow?->assignedUser?->name,
-                        'status' => $workflow?->status,
+                    'department' => [
+                        'id' => $req->department,
+                        'name' => $req->departmentData?->name,
                     ],
+
+                    'supplier' => [
+                        'id' => $req->supplier_id,
+                        'name' => $req->supplierData?->name,
+                    ],
+
+                    'workflow_history' => $approvalTimeline->values(), // Reindex keys
 
                     'documents' => $req->documents->map(function ($doc) {
                         $filename = last(explode('_', $doc->document));
@@ -762,9 +788,15 @@ class CreateRequestController extends Controller
                 ];
             });
 
+            // Return the JSON response with the counts, total amounts, and data
             return response()->json([
                 'status' => 'success',
                 'counts' => $counts,
+                'total_amount' => [
+                    'user_total_amount' => $userTotalAmount,
+                    'entity_total_amount' => $entityTotalAmount,
+                    'admin_total_amount' => $adminTotalAmount,
+                ],
                 'data' => $data,
             ]);
 
