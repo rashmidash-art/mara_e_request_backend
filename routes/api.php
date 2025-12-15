@@ -1,5 +1,11 @@
 <?php
 
+// use App\Http\Controllers\CategoryController as ControllersCategoryController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
+Route::options('{any}', fn () => response()->json())->where('any', '.*');
+
 use App\Http\Controllers\Admin\BudgetController;
 use App\Http\Controllers\Admin\CategoreController;
 use App\Http\Controllers\Admin\CreateRequestController;
@@ -20,9 +26,6 @@ use App\Http\Controllers\Admin\WorkFlowStepsController;
 use App\Http\Controllers\Admin\WorkFlowTypeController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetContrller;
-// use App\Http\Controllers\CategoryController as ControllersCategoryController;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
 
 Route::post('admin/login', [LoginController::class, 'login']);
 

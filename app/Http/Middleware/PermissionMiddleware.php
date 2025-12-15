@@ -20,7 +20,7 @@ class PermissionMiddleware
         }
 
         // ===== LOG: User + Route =====
-        Log::info('🔐 Permission Check', [
+        Log::info(' Permission Check', [
             'user_id'   => $user->id,
             'user_type' => $user instanceof User ? $user->user_type : 'entity',
             'route'     => $request->route()->getName(),
@@ -31,7 +31,7 @@ class PermissionMiddleware
         //  1. SUPER ADMIN → FULL ACCESS
         // ======================================
         if ($user instanceof User && $user->user_type === 0) {
-            Log::info("🟢 SUPER ADMIN bypass");
+            Log::info(" SUPER ADMIN bypass");
             return $next($request);
         }
 
@@ -46,19 +46,19 @@ class PermissionMiddleware
 
             // allow only its own entity view
             if ($request->route()->getName() === 'entity.itself') {
-                Log::info("🟢 ENTITY allowed own details");
+                Log::info(" ENTITY allowed own details");
                 return $next($request);
             }
 
             // allow only "entities.view"
             if ($permission === 'entities.view') {
-                Log::info("🟢 ENTITY allowed entity list");
+                Log::info(" ENTITY allowed entity list");
                 return $next($request);
             }
 
             // block other entity actions
             if (str_starts_with($permission, 'entities.')) {
-                Log::warning("🔴 ENTITY blocked: $permission");
+                Log::warning(" ENTITY blocked: $permission");
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Forbidden – You cannot access other entity details',
@@ -66,7 +66,7 @@ class PermissionMiddleware
             }
 
             // allow all other modules
-            Log::info("🟢 ENTITY allowed general access");
+            Log::info(" ENTITY allowed general access");
             return $next($request);
         }
 
@@ -76,7 +76,7 @@ class PermissionMiddleware
         if ($user instanceof User) {
 
             $permission = $this->resolvePermission($request);
-            Log::info("📌 Required Permission: $permission");
+            Log::info(" Required Permission: $permission");
 
             // Fetch user's assigned permissions
             $userPermissions = $user
@@ -88,11 +88,11 @@ class PermissionMiddleware
                 ->pluck('name')
                 ->toArray();
 
-            Log::info("🧾 User Permissions:", $userPermissions);
+            Log::info(" User Permissions:", $userPermissions);
 
             // Check if user has required permission
             if (!in_array($permission, $userPermissions)) {
-                Log::warning("❌ Permission Denied: $permission");
+                Log::warning(" Permission Denied: $permission");
 
                 return response()->json([
                     'status' => 'error',
@@ -101,7 +101,7 @@ class PermissionMiddleware
                 ], 403);
             }
 
-            Log::info("🟢 Permission Granted: $permission");
+            Log::info(" Permission Granted: $permission");
             return $next($request);
         }
 
@@ -113,7 +113,7 @@ class PermissionMiddleware
      */
     protected function resolvePermission(Request $request)
     {
-        // 1️⃣ If route has a name (recommended)
+        //  If route has a name (recommended)
         $routeName = $request->route()->getName();
 
         if ($routeName) {
@@ -137,7 +137,7 @@ class PermissionMiddleware
             return "{$module}.{$action}";
         }
 
-        // 2️⃣ Fallback using URI
+        //  Fallback using URI
         $uri = str_replace('api/', '', $request->route()->uri());
         $segments = explode('/', trim($uri, '/'));
 

@@ -20,7 +20,7 @@ class LoginController extends Controller
         ]);
 
         // -----------------------------------------------
-        // 1️⃣ CHECK USER TABLE FIRST
+        //  CHECK USER TABLE FIRST
         // -----------------------------------------------
         $user = User::where('email', $request->email)->first();
         Log::info('User lookup: '.($user ? $user->id : 'not found'));
@@ -79,7 +79,7 @@ class LoginController extends Controller
         }
 
         // -----------------------------------------------
-        // 2️⃣ CHECK ENTITY TABLE (entitis)
+        //  CHECK ENTITY TABLE (entitis)
         // -----------------------------------------------
         $entity = Entiti::where('email', $request->email)->first();
         Log::info('Entity lookup: '.($entity ? $entity->id : 'not found'));
@@ -129,7 +129,7 @@ class LoginController extends Controller
         }
 
         // -----------------------------------------------
-        // 3️⃣ INVALID LOGIN
+        //  INVALID LOGIN
         // -----------------------------------------------
         return response()->json([
             'status' => 'error',
