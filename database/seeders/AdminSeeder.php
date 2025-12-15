@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Hash;
         {
             DB::table('users')->insert([
                 'name' => 'Admin',
-                'email' => 'admin@gmail.com',
+                'email' => 'admin@gmail.com.com',
                 'password' => Hash::make('Admin@123'),
                 'user_type' => 0,
                 'created_at' => now(),

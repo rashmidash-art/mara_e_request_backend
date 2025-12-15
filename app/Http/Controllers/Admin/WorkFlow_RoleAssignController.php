@@ -8,6 +8,7 @@ use App\Models\WorkflowRoleAssign;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class WorkFlow_RoleAssignController extends Controller
@@ -203,5 +204,31 @@ class WorkFlow_RoleAssignController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function getRolesByWorkflowStep($workflow_id, $step_id)
+    {
+        $roles = DB::table('workflow_role_assigns as wsr')
+            ->join('roles as r', 'r.id', '=', 'wsr.role_id')
+            ->where('wsr.workflow_id', $workflow_id)
+            ->where('wsr.step_id', $step_id)
+            ->select('r.id', 'r.name')
+            ->distinct()
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $roles,
+        ]);
+    }
+
+    public function getRolesByStep($id)
+    {
+        $role = WorkflowRoleAssign::where('step_id', $id)->get();
+
+        return response()->json([
+            'status' => 'success',
+            'steps' => $role,
+        ]);
     }
 }
