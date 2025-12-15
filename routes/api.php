@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\CreateRequestController;
 use App\Http\Controllers\Admin\DeprtmentController;
 use App\Http\Controllers\Admin\DocumentController;
 use App\Http\Controllers\Admin\EntitiesController;
+use App\Http\Controllers\Admin\EscalationController;
 use App\Http\Controllers\Admin\FileFormatController;
 use App\Http\Controllers\Admin\ManagerController;
 use App\Http\Controllers\Admin\RequestTypeController;
@@ -115,9 +116,13 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('workflowsteps', WorkFlowStepsController::class);
         Route::get('workflow/{id}/steps', action: [WorkFlowStepsController::class, 'getStepByWorkflow']);
         Route::post('workflowsteps/reorder', [WorkFlowStepsController::class, 'reorder']);
-        Route::apiResource('workflow_role/assign', WorkFlow_RoleAssignController::class);
-
+        Route::apiResource('workflow-role/assign', WorkFlow_RoleAssignController::class);
         Route::get('/workflowbyTypeandCat', [WorkFlowController::class, 'getWorkflowByTypeAndCategory']);
+        Route::apiResource('escalations', EscalationController::class);
+
+
+
+
 
         // routes/api.php
         Route::apiResource('supplier', controller: SupplierController::class);
