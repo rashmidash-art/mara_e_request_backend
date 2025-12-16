@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Models\Document;
 use App\Models\Entiti;
+use App\Models\Supplier;
 use App\Models\User;
 use App\Models\WorkFlow;
 use Illuminate\Http\Request;
@@ -199,7 +201,10 @@ class EntitiesController extends Controller
         if (Department::where('entiti_id', $entityId)->exists()) {
             return true;
         }
-        if (WorkFlow::where('entiti_id', $entityId)->exists()) {
+        if (Supplier::where('entiti_id', $entityId)->exists()) {
+            return true;
+        }
+        if (Document::where('entiti_id', $entityId)->exists()) {
             return true;
         }
         return false;

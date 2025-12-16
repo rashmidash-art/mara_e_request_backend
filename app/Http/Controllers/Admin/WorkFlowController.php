@@ -4,10 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\WorkFlow;
-use Illuminate\Http\Request;
-use Illuminate\Database\QueryException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Validation\Rule;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
 
 class WorkFlowController extends Controller
 {
@@ -22,13 +21,13 @@ class WorkFlowController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflows retrieved successfully',
-                'data' => $workflows
+                'data' => $workflows,
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve workflows',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -51,7 +50,7 @@ class WorkFlowController extends Controller
             // Generate workflow_id automatically: WF001, WF002...
             $lastWorkflow = WorkFlow::latest('id')->first();
             $nextId = $lastWorkflow ? $lastWorkflow->id + 1 : 1;
-            $workflowId = 'WF' . str_pad($nextId, 3, '0', STR_PAD_LEFT);
+            $workflowId = 'WF'.str_pad($nextId, 3, '0', STR_PAD_LEFT);
 
             $validated['workflow_id'] = $workflowId;
 
@@ -60,17 +59,16 @@ class WorkFlowController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow created successfully',
-                'data' => $workflow
+                'data' => $workflow,
             ], 200);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to create workflow',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     /**
      * Display a specific workflow.
@@ -83,13 +81,13 @@ class WorkFlowController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow retrieved successfully',
-                'data' => $workflow
+                'data' => $workflow,
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Workflow not found',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 401);
         }
     }
@@ -117,23 +115,22 @@ class WorkFlowController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow updated successfully',
-                'data' => $workflow
+                'data' => $workflow,
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Workflow not found',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 401);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update workflow',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     /**
      * Delete a workflow.
@@ -142,28 +139,33 @@ class WorkFlowController extends Controller
     {
         try {
             $workflow = WorkFlow::findOrFail($id);
+
+            // Delete all related steps, roles, and escalations
+            $workflow->steps()->delete();
+            $workflow->roles()->delete();
+            $workflow->escalations()->delete();
+
+            // Then delete the workflow itself
             $workflow->delete();
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Workflow deleted successfully'
+                'message' => 'Workflow and all related steps, roles, and escalations deleted successfully',
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Workflow not found',
-                'error' => $e->getMessage()
-            ], 401);
+                'error' => $e->getMessage(),
+            ], 404);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete workflow',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
-
 
     // app/Http/Controllers/WorkflowController.php
     public function getWorkflowByTypeAndCategory(Request $request)
@@ -177,16 +179,16 @@ class WorkFlowController extends Controller
             ->where('categori_id', $request->category_id)
             ->first();
 
-        if (!$workflow) {
+        if (! $workflow) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Workflow not found for the selected request type & category.'
+                'message' => 'Workflow not found for the selected request type & category.',
             ], 404);
         }
 
         return response()->json([
             'status' => 'success',
-            'data' => $workflow
+            'data' => $workflow,
         ]);
     }
 }

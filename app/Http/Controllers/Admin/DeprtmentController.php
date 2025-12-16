@@ -7,8 +7,8 @@ use App\Models\Department;
 use App\Models\Entiti;
 use App\Models\Manager;
 use App\Models\User;
-use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -25,27 +25,29 @@ class DeprtmentController extends Controller
             $user = $request->user();
             if ($user instanceof User && $user->user_type == 0) {
                 $departments = Department::all();
-            } else if ($user instanceof Entiti) {
+            } elseif ($user instanceof Entiti) {
                 $departments = Department::where('entiti_id', $user->id)->get();
-            } else if ($user instanceof User) {
+            } elseif ($user instanceof User) {
                 // If you want normal users to see all
                 $departments = Department::all();
                 // OR restrict by permissions if needed
                 // $departments = Department::whereIn('id', $user->departments()->pluck('department_id'))->get();
             }
+
             // $departments = Department::all();
             return response()->json([
                 'status' => 'success',
                 'message' => 'Departments retrieved successfully',
-                'data' => $departments
+                'data' => $departments,
             ], 200);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to retrieve departments'
+                'message' => 'Failed to retrieve departments',
             ], 500);
         }
     }
+
     public function store(Request $request)
     {
         try {
@@ -60,9 +62,8 @@ class DeprtmentController extends Controller
                     'string',
                     'max:255',
                     Rule::unique('departments')->where(
-                        fn($q) =>
-                        $q->where('entiti_id', $request->entiti_id)
-                    )
+                        fn ($q) => $q->where('entiti_id', $request->entiti_id)
+                    ),
                 ],
 
                 'department_code' => [
@@ -70,15 +71,14 @@ class DeprtmentController extends Controller
                     'string',
                     'max:50',
                     Rule::unique('departments')->where(
-                        fn($q) =>
-                        $q->where('entiti_id', $request->entiti_id)
-                    )
+                        fn ($q) => $q->where('entiti_id', $request->entiti_id)
+                    ),
                 ],
 
                 'enable_cost_center' => 'nullable|integer|in:0,1',
                 'description' => 'nullable|string',
                 'budget' => 'nullable|numeric|min:0',
-                'status' => 'nullable|integer|in:0,1'
+                'status' => 'nullable|integer|in:0,1',
             ]);
 
             $entity = Entiti::findOrFail($entitiId);
@@ -91,26 +91,26 @@ class DeprtmentController extends Controller
             if ($requestedBudget > $entity->budget) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => "Department budget cannot exceed entity budget ({$entity->budget})."
+                    'message' => "Department budget cannot exceed entity budget ({$entity->budget}).",
                 ], 400);
             }
 
             if (($currentDepartmentBudget + $requestedBudget) > $entity->budget) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => "Total department budgets exceed entity budget ({$entity->budget})."
+                    'message' => "Total department budgets exceed entity budget ({$entity->budget}).",
                 ], 400);
             }
             $department = Department::create([
-                'entiti_id'             => $entitiId,
-                'manager_id'            => null,
-                'name'                  => $request->name,
-                'department_code'       => $request->department_code,
-                'bc_dimention_value'    => Department::generateBcDimension($request->department_code),
-                'enable_cost_center'    => $request->enable_cost_center ?? 0,
-                'budget'                => $requestedBudget,
-                'description'           => $request->description,
-                'status'                => $request->status ?? 0
+                'entiti_id' => $entitiId,
+                'manager_id' => null,
+                'name' => $request->name,
+                'department_code' => $request->department_code,
+                'bc_dimention_value' => Department::generateBcDimension($request->department_code),
+                'enable_cost_center' => $request->enable_cost_center ?? 0,
+                'budget' => $requestedBudget,
+                'description' => $request->description,
+                'status' => $request->status ?? 0,
             ]);
 
             if ($request->user_id) {
@@ -118,60 +118,59 @@ class DeprtmentController extends Controller
                 $user = User::find($request->user_id);
 
                 $manager = Manager::create([
-                    'user_id'       => $request->user_id,
-                    'entiti_id'     => $entitiId,
+                    'user_id' => $request->user_id,
+                    'entiti_id' => $entitiId,
                     'department_id' => $department->id,
-                    'employee_id'   => $user->employee_id ?? null,
-                    'name'          => $user->name ?? null,
-                    'status'        => 0
+                    'employee_id' => $user->employee_id ?? null,
+                    'name' => $user->name ?? null,
+                    'status' => 0,
                 ]);
 
                 $department->update([
-                    'manager_id' => $manager->id
+                    'manager_id' => $manager->id,
                 ]);
             }
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Department created successfully',
-                'data'    => $department
+                'data' => $department,
             ]);
         } catch (ValidationException $e) {
             return response()->json([
-                'status' => 'error',
-                'message' => $e->errors()
+                'status' => 'validation_error',
+                'errors' => $e->errors(),
             ], 422);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     // Show a single department
     public function show($id)
     {
         try {
             $department = Department::find($id);
-            if (!$department) {
+            if (! $department) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Department not found'
+                    'message' => 'Department not found',
                 ], 404);
             }
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Department details retrieved successfully',
-                'data' => $department
+                'data' => $department,
             ], 200);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve department details',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -183,10 +182,10 @@ class DeprtmentController extends Controller
 
             $department = Department::find($id);
 
-            if (!$department) {
+            if (! $department) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Department not found'
+                    'message' => 'Department not found',
                 ], 404);
             }
 
@@ -200,31 +199,35 @@ class DeprtmentController extends Controller
                     'string',
                     'max:255',
                     Rule::unique('departments')
-                        ->where(function ($query) use ($request, $department) {
-                            return $query->where('entiti_id', $request->entiti_id ?? $department->entiti_id);
-                        })
-                        ->ignore($department->id)
+                        ->where(fn ($q) => $q->where('entiti_id', $request->entiti_id ?? $department->entiti_id)
+                        )
+                        ->ignore($department->id),
                 ],
 
-                'department_code' => 'sometimes|required|string|max:50|unique:departments,department_code,' . $department->id,
+                'department_code' => [
+                   'sometimes',
+                   'required',
+                   'string',
+                   'max:50',
+                   Rule::unique('departments', 'department_code')
+                        ->where(fn ($q) => $q->where('entiti_id', $request->entiti_id ?? $department->entiti_id)
+                        )
+                        ->ignore($department->id),
+               ],
 
                 'enable_cost_center' => 'sometimes|integer|in:0,1',
                 'budget' => 'sometimes|numeric|min:0',
                 'description' => 'nullable|string',
                 'status' => 'sometimes|integer|in:0,1',
-
                 'manager_id' => 'sometimes|nullable|integer|exists:managers,id',
             ], [
-                'name.unique' => 'Department name already exists for this entity.',
-                'department_code.unique' => 'Department code already exists.',
-                'enable_cost_center.in' => 'Enable cost center must be 0 or 1.',
-                'budget.numeric' => 'Budget must be a number.',
-                'budget.min' => 'Budget cannot be negative.',
-            ]);
+               'name.unique' => 'Department name already exists for this entity.',
+               'department_code.unique' => 'Department code already exists.',
+           ]);
 
             // Determine the entity
             $entityId = $request->entiti_id ?? $department->entiti_id;
-            $entity   = Entiti::findOrFail($entityId);
+            $entity = Entiti::findOrFail($entityId);
 
             // Budget validations
             $requestedBudget = $request->budget ?? $department->budget;
@@ -236,7 +239,7 @@ class DeprtmentController extends Controller
             if ($requestedBudget > $entity->budget) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Department budget cannot exceed entity budget of ' . $entity->budget
+                    'message' => 'Department budget cannot exceed entity budget of '.$entity->budget,
                 ], 400);
             }
 
@@ -244,9 +247,9 @@ class DeprtmentController extends Controller
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Total department budgets ('
-                        . ($currentDepartmentBudget + $requestedBudget)
-                        . ') cannot exceed entity budget of '
-                        . $entity->budget
+                        .($currentDepartmentBudget + $requestedBudget)
+                        .') cannot exceed entity budget of '
+                        .$entity->budget,
                 ], 400);
             }
             // Regenerate BC-Dimension only if department_code changed
@@ -265,23 +268,23 @@ class DeprtmentController extends Controller
                 'enable_cost_center' => $request->enable_cost_center ?? $department->enable_cost_center,
                 'budget' => $requestedBudget,
                 'description' => $request->description ?? $department->description,
-                'status' => $request->status ?? $department->status
+                'status' => $request->status ?? $department->status,
             ]);
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Department updated successfully',
-                'data' => $department
+                'data' => $department,
             ], 200);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => $e->errors()
+                'message' => $e->errors(),
             ], 422);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
@@ -291,27 +294,27 @@ class DeprtmentController extends Controller
     {
         try {
             $department = Department::find($id);
-            if (!$department) {
+            if (! $department) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Department not found'
+                    'message' => 'Department not found',
                 ], 404);
             }
 
             $department->delete();
+
             return response()->json([
                 'status' => 'success',
-                'message' => 'Department deleted successfully'
+                'message' => 'Department deleted successfully',
             ], 200);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete department',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     public function getByEntity($id)
     {
@@ -319,11 +322,9 @@ class DeprtmentController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'departments' => $departments
+            'departments' => $departments,
         ]);
     }
-
-
 
     public function getUserbyDepartment($id)
     {
@@ -331,7 +332,7 @@ class DeprtmentController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'users' => $users
+            'users' => $users,
         ]);
     }
 }

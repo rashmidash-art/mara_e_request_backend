@@ -59,7 +59,7 @@ class WorkFlowStepsController extends Controller
                     return $query->where('workflow_id', $request->workflow_id);
                 }),
             ],
-            'name' => 'required|string|max:255|unique:workflow_steps,name',
+            'name' => 'required|string|max:255',
             'form_type' => 'nullable|string|max:255',
             'sla_hour' => 'nullable|integer',
             'description' => 'nullable|string',
@@ -141,7 +141,7 @@ class WorkFlowStepsController extends Controller
                     'required',
                     'string',
                     'max:255',
-                    Rule::unique('workflow_steps')->ignore($id),
+                    // Rule::unique('workflow_steps')->ignore($id),
                 ],
                 'form_type' => 'nullable|string|max:255',
                 'sla_hour' => 'nullable|integer',

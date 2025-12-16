@@ -222,13 +222,18 @@ class WorkFlow_RoleAssignController extends Controller
         ]);
     }
 
-    public function getRolesByStep($id)
+    public function getRolesByStep($stepId)
     {
-        $role = WorkflowRoleAssign::where('step_id', $id)->get();
+        $roles = WorkflowRoleAssign::with([
+            'role:id,name',
+            'assignedUser:id,name',
+        ])
+            ->where('step_id', $stepId)
+            ->get();
 
         return response()->json([
             'status' => 'success',
-            'steps' => $role,
+            'roles' => $roles,
         ]);
     }
 }
