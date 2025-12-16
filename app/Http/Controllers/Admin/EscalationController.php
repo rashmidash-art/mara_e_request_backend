@@ -40,7 +40,6 @@ class EscalationController extends Controller
         ]);
 
         try {
-            //  Only allow user_id if it exists for role_id in workflow_role_assigns
             if (! empty($validated['user_id'])) {
                 $exists = WorkflowRoleAssign::where('role_id', $validated['role_id'])
                     ->where('user_id', $validated['user_id'])
