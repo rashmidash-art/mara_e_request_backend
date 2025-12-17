@@ -9,7 +9,14 @@ class WorkFlow extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['workflow_id', 'categori_id', 'request_type_id', 'name', 'steps', 'description', 'status'];
+    protected $fillable = ['workflow_id','entity_id', 'categori_id', 'request_type_id', 'name', 'steps', 'description', 'status'];
+
+
+    public function entity()
+    {
+        return $this->belongsTo(Entiti::class, 'entity_id', 'id');
+    }
+
 
     public function steps()
     {

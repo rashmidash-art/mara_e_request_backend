@@ -40,4 +40,11 @@ class Entiti extends Authenticatable
     {
         return $this->hasMany(Document::class, 'entiti_id');
     }
+
+
+    public function workflow()
+    {
+        return $this->hasMany(WorkFlow::class, 'entity_id', 'id');
+    }
+
 }

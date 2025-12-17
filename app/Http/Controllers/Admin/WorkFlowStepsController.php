@@ -4,16 +4,14 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\WorkflowStep;
-use Illuminate\Http\Request;
-use Illuminate\Database\QueryException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class WorkFlowStepsController extends Controller
 {
-
-
     protected function updateStepCount(int $workflowId)
     {
         // Count the steps for the workflow
@@ -22,6 +20,7 @@ class WorkFlowStepsController extends Controller
         // Update the 'step' column in the work_flows table
         DB::table('work_flows')->where('id', $workflowId)->update(['steps' => $stepCount]);
     }
+
     /**
      * Display a listing of all workflow steps.
      */
@@ -33,13 +32,13 @@ class WorkFlowStepsController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow steps retrieved successfully',
-                'data' => $steps
+                'data' => $steps,
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve workflow steps',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -51,6 +50,7 @@ class WorkFlowStepsController extends Controller
     {
         $validated = $request->validate([
             'workflow_id' => 'required|integer|exists:work_flows,id',
+            'entity_id' => 'nullable|integer',
             'order_id' => [
                 'nullable',
                 'integer',
@@ -64,7 +64,7 @@ class WorkFlowStepsController extends Controller
             'sla_hour' => 'nullable|integer',
             'description' => 'nullable|string',
             'escalation' => 'nullable|string|max:255',
-            'status' => 'nullable|integer|in:0,1'
+            'status' => 'nullable|integer|in:0,1',
         ]);
 
         try {
@@ -76,20 +76,20 @@ class WorkFlowStepsController extends Controller
 
             $step = WorkflowStep::create($validated);
             $this->updateStepCount($validated['workflow_id']);
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow step created successfully',
-                'data' => $step
+                'data' => $step,
             ], 200);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to create workflow step',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     /**
      * Display a specific workflow step.
@@ -102,19 +102,19 @@ class WorkFlowStepsController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow step retrieved successfully',
-                'data' => $step
+                'data' => $step,
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Workflow step not found',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 404);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve workflow step',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -129,12 +129,13 @@ class WorkFlowStepsController extends Controller
 
             $validated = $request->validate([
                 'workflow_id' => 'required|integer|exists:work_flows,id',
+                'entity_id' => 'nullable|integer',
                 'order_id' => [
                     'nullable',
                     'integer',
                     'min:1',
                     Rule::unique('workflow_steps')
-                        ->where(fn($query) => $query->where('workflow_id', $request->workflow_id))
+                        ->where(fn ($query) => $query->where('workflow_id', $request->workflow_id))
                         ->ignore($id),
                 ],
                 'name' => [
@@ -147,7 +148,7 @@ class WorkFlowStepsController extends Controller
                 'sla_hour' => 'nullable|integer',
                 'description' => 'nullable|string',
                 'escalation' => 'nullable|string|max:255',
-                'status' => 'nullable|integer|in:0,1'
+                'status' => 'nullable|integer|in:0,1',
             ]);
 
             $step->update($validated);
@@ -155,25 +156,25 @@ class WorkFlowStepsController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow step updated successfully',
-                'data' => $step
+                'data' => $step,
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Workflow step not found',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 404);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update workflow step',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Unexpected error occurred',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -187,31 +188,31 @@ class WorkFlowStepsController extends Controller
             $step = WorkflowStep::findOrFail($id);
             $step->delete();
             $this->updateStepCount($step->workflow_id);
+
             return response()->json([
                 'status' => 'success',
-                'message' => 'Workflow step deleted successfully'
+                'message' => 'Workflow step deleted successfully',
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Workflow step not found',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 404);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete workflow step',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Unexpected error occurred',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     public function reorder(Request $request)
     {
@@ -233,7 +234,9 @@ class WorkFlowStepsController extends Controller
 
                 // Get current step
                 $step = WorkflowStep::where('workflow_id', $workflowId)->find($stepId);
-                if (!$step) continue;
+                if (! $step) {
+                    continue;
+                }
 
                 $currentOrder = $step->order_id;
 
@@ -259,12 +262,14 @@ class WorkFlowStepsController extends Controller
 
             DB::commit();
             $this->updateStepCount($workflowId);
+
             return response()->json([
                 'status' => 'success',
-                'message' => 'Workflow steps reordered successfully'
+                'message' => 'Workflow steps reordered successfully',
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to reorder steps',
@@ -273,14 +278,13 @@ class WorkFlowStepsController extends Controller
         }
     }
 
-
     public function getStepByWorkflow($id)
     {
         $steps = WorkflowStep::where('workflow_id', $id)->get();
 
         return response()->json([
             'status' => 'success',
-            'steps' => $steps
+            'steps' => $steps,
         ]);
     }
 }

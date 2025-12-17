@@ -5,21 +5,24 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\WorkflowRoleAssign;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Database\QueryException;
+use App\Models\WorkflowUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class WorkFlow_RoleAssignController extends Controller
 {
-    /**
-     * Display all role assignments.
-     */
     public function index()
     {
         try {
-            $assignments = WorkflowRoleAssign::orderByDesc('id')->get();
+            $assignments = WorkflowRoleAssign::with(['role:id,name', 'workflow:id,name', 'step:id,name'])->get();
+
+            $assignments->transform(function ($assignment) {
+                $users = $assignment->assignedUsers();
+                $assignment->assigned_users = $users->pluck('name')->toArray();
+
+                return $assignment;
+            });
 
             return response()->json([
                 'status' => 'success',
@@ -27,6 +30,8 @@ class WorkFlow_RoleAssignController extends Controller
                 'data' => $assignments,
             ], 200);
         } catch (\Exception $e) {
+            Log::error('WorkflowRoleAssign index error', ['error' => $e->getMessage()]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve workflow role assignments.',
@@ -35,144 +40,129 @@ class WorkFlow_RoleAssignController extends Controller
         }
     }
 
+    /**
+     * Store workflow role assignment(s)
+     */
     public function store(Request $request)
     {
-        // 🔹 Log incoming request (safe fields only)
-        Log::info('WorkflowRoleAssign STORE called', [
-            'method' => $request->method(),
-            'url' => $request->fullUrl(),
-            'headers' => $request->headers->all(),
-            'payload' => $request->all(),
+        $request->validate([
+            'entity_id' => 'required|integer',
+            'workflow_id' => 'required|integer',
+            'step_id' => 'required|integer',
+            'role_id' => 'required|integer',
+            'approval_logic' => 'required|string',
+            'user_id' => 'required', // Can be single or array
+            'remark' => 'nullable|string',
         ]);
 
-        try {
-            $validated = $request->validate([
-                'workflow_id' => 'required|integer|exists:work_flows,id',
-                'step_id' => 'required|integer|exists:workflow_steps,id',
-                'role_id' => 'required|integer|exists:roles,id',
-                'approval_logic' => 'required|string|in:single,and,or',
-                'specific_user' => 'nullable|integer|in:0,1',
-                'user_id' => 'nullable|integer|exists:users,id',
-                'remark' => 'nullable|string',
-            ]);
+        $entity_id = $request->input('entity_id');
+        $workflow_id = $request->input('workflow_id');
+        $step_id = $request->input('step_id');
+        $role_id = $request->input('role_id');
+        $approval_logic = $request->input('approval_logic');
+        $remark = $request->input('remark', null);
 
-            Log::info('WorkflowRoleAssign validation passed', $validated);
+        $user_ids = $request->input('user_id');
 
-            $eligibleUsers = collect();
-
-            if ($validated['approval_logic'] === 'single') {
-                if (($validated['specific_user'] ?? 1) == 0 && ! empty($validated['user_id'])) {
-                    $eligibleUsers = User::where('id', $validated['user_id'])->get();
-                } else {
-                    $eligibleUsers = User::where('role_id', $validated['role_id'])->get();
-                }
-            } elseif (in_array($validated['approval_logic'], ['or', 'and'])) {
-                $eligibleUsers = User::where('role_id', $validated['role_id'])->get();
-            }
-
-            $assignment = WorkflowRoleAssign::create($validated);
-
-            Log::info('WorkflowRoleAssign created successfully', [
-                'assignment_id' => $assignment->id,
-            ]);
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Workflow role assignment created successfully.',
-                'data' => [
-                    'assignment' => $assignment,
-                    'users' => $eligibleUsers,
-                ],
-            ], 200);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-
-            Log::warning('WorkflowRoleAssign validation failed', [
-                'errors' => $e->errors(),
-            ]);
-
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Validation failed',
-                'errors' => $e->errors(),
-            ], 422);
-
-        } catch (QueryException $e) {
-
-            Log::error('WorkflowRoleAssign DB error', [
-                'error' => $e->getMessage(),
-                'sql' => $e->getSql(),
-                'bindings' => $e->getBindings(),
-            ]);
-
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Database error',
-            ], 500);
-
-        } catch (\Throwable $e) {
-
-            Log::critical('WorkflowRoleAssign unknown error', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Server error',
-            ], 500);
+        // Ensure $user_ids is always an array
+        if (! is_array($user_ids)) {
+            $user_ids = [$user_ids];
         }
+
+        // Loop through each user and insert a record
+        foreach ($user_ids as $user_id) {
+            DB::table('workflow_role_assigns')->insert([
+                'entity_id' => $entity_id,
+                'workflow_id' => $workflow_id,
+                'step_id' => $step_id,
+                'role_id' => $role_id,
+                'approval_logic' => $approval_logic,
+                'specific_user' => 1, // Assuming 1 means specific user
+                'user_id' => $user_id,
+                'remark' => $remark,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Workflow role assigned successfully.',
+        ]);
     }
 
     /**
-     * Update workflow role assignment.
+     * Update workflow role assignment
      */
-    public function update(Request $request, string $id)
+    public function update(Request $request, int $id)
     {
         try {
-
             $assignment = WorkflowRoleAssign::findOrFail($id);
 
+            $entity_id = $request->input('entity_id', $assignment->entity_id);
+            $workflow_id = $request->input('workflow_id', $assignment->workflow_id);
+            $step_id = $request->input('step_id', $assignment->step_id);
+            $role_id = $request->input('role_id', $assignment->role_id);
+            $approval_logic = strtolower($request->input('approval_logic', $assignment->approval_logic));
+            $user_ids = array_map('intval', (array) $request->input('user_id')); // ensure array
+            $remark = $request->input('remark', $assignment->remark);
+            $specific_user = ($approval_logic === 'or') ? 1 : 0;
+
+            // Update workflow_role_assigns
             $assignment->update([
-                'workflow_id' => $request->workflow_id ?? $assignment->workflow_id,
-                'step_id' => $request->step_id ?? $assignment->step_id,
-                'role_id' => $request->role_id ?? $assignment->role_id,
-                'approval_logic' => $request->approval_logic ?? $assignment->approval_logic,
-                'specific_user' => $request->specific_user ?? $assignment->specific_user,
-                'user_id' => $request->user_id ?? $assignment->user_id,
-                'remark' => $request->remark ?? $assignment->remark,
+                'entity_id' => $entity_id,
+                'workflow_id' => $workflow_id,
+                'step_id' => $step_id,
+                'role_id' => $role_id,
+                'approval_logic' => ucfirst($approval_logic),
+                'specific_user' => $specific_user,
+                'user_id' => ($approval_logic === 'or') ? json_encode($user_ids) : null,
+                'remark' => $remark,
             ]);
 
-            // Recalculate eligible users
-            $eligibleUsers = collect();
+            // Delete old WorkflowUser entries for this step & role
+            WorkflowUser::where('workflow_id', $workflow_id)
+                ->where('step_id', $step_id)
+                ->where('role_id', $role_id)
+                ->delete();
 
-            if ($assignment->approval_logic === 'single') {
-                if ($assignment->specific_user == 0 && ! empty($assignment->user_id)) {
-                    $eligibleUsers = User::where('id', $assignment->user_id)->get();
-                } else {
-                    $eligibleUsers = User::where('role_id', $assignment->role_id)->get();
-                }
-            } elseif ($assignment->approval_logic === 'or') {
-                $eligibleUsers = User::where('role_id', $assignment->role_id)->get();
-            } elseif ($assignment->approval_logic === 'and') {
-                $eligibleUsers = User::where('role_id', $assignment->role_id)->get();
+            // Determine users to assign
+            $usersToAssign = collect();
+
+            if ($approval_logic === 'single' || $approval_logic === 'and') {
+                $usersToAssign = User::whereHas('roles', function ($q) use ($role_id) {
+                    $q->where('role_id', $role_id);
+                })->get();
+            } elseif ($approval_logic === 'or' && ! empty($user_ids)) {
+                $usersToAssign = User::whereIn('id', $user_ids)->get();
+            }
+
+            // Insert new WorkflowUser entries
+            foreach ($usersToAssign as $user) {
+                WorkflowUser::updateOrCreate(
+                    [
+                        'workflow_id' => $workflow_id,
+                        'step_id' => $step_id,
+                        'role_id' => $role_id,
+                        'user_id' => $user->id,
+                    ],
+                    [
+                        'entity_id' => $entity_id,
+                        'logic' => ucfirst($approval_logic),
+                        'status' => 'active',
+                    ]
+                );
             }
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow role assignment updated successfully.',
-                'data' => [
-                    'assignment' => $assignment,
-                    'users' => $eligibleUsers,
-                ],
+                'data' => $assignment,
             ], 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Workflow role assignment not found.',
-                'error' => $e->getMessage(),
-            ], 404);
+
         } catch (\Exception $e) {
+            Log::error('WorkflowRoleAssign update error', ['error' => $e->getMessage()]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update workflow role assignment.',
@@ -181,23 +171,75 @@ class WorkFlow_RoleAssignController extends Controller
         }
     }
 
-    public function destroy(string $id)
+    public function show(int $id)
     {
         try {
-            $assignment = WorkflowRoleAssign::findOrFail($id);
+            $assignment = WorkflowUser::with(['user:id,name', 'role:id,name', 'workflow:id,name', 'step:id,name'])
+                ->findOrFail($id);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Workflow role assignment retrieved successfully.',
+                'data' => $assignment,
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('WorkflowUser show error', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Workflow role assignment not found.',
+                'error' => $e->getMessage(),
+            ], 404);
+        }
+    }
+
+    // public function update(Request $request, int $id)
+    // {
+    //     try {
+    //         $assignment = WorkflowUser::findOrFail($id);
+
+    //         $assignment->update([
+    //             'entity_id' => $request->input('entity_id', $assignment->entity_id),
+    //             'workflow_id' => $request->input('workflow_id', $assignment->workflow_id),
+    //             'step_id' => $request->input('step_id', $assignment->step_id),
+    //             'role_id' => $request->input('role_id', $assignment->role_id),
+    //             'logic' => $request->input('logic', $assignment->logic),
+    //             'user_id' => $request->input('user_id', $assignment->user_id),
+    //             'status' => $request->input('status', $assignment->status),
+    //         ]);
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'Workflow role assignment updated successfully.',
+    //             'data' => $assignment,
+    //         ], 200);
+
+    //     } catch (\Exception $e) {
+    //         Log::error('WorkflowUser update error', ['error' => $e->getMessage()]);
+
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Failed to update workflow role assignment.',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
+    public function destroy(int $id)
+    {
+        try {
+            $assignment = WorkflowUser::findOrFail($id);
             $assignment->delete();
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow role assignment deleted successfully.',
             ], 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Workflow role assignment not found.',
-                'error' => $e->getMessage(),
-            ], 404);
-        } catch (QueryException $e) {
+
+        } catch (\Exception $e) {
+            Log::error('WorkflowUser delete error', ['error' => $e->getMessage()]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete workflow role assignment.',
@@ -206,6 +248,28 @@ class WorkFlow_RoleAssignController extends Controller
         }
     }
 
+    /**
+     * Get roles assigned to a workflow step.
+     */
+    public function getRolesByStep(int $workflow_id, int $step_id)
+    {
+        $roles = DB::table('workflow_users as wu')
+            ->join('roles as r', 'r.id', '=', 'wu.role_id')
+            ->where('wu.workflow_id', $workflow_id)
+            ->where('wu.step_id', $step_id)
+            ->select('r.id', 'r.name')
+            ->distinct()
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $roles,
+        ]);
+    }
+
+    /**
+     * Get roles by workflow and step from workflow_role_assigns table
+     */
     public function getRolesByWorkflowStep($workflow_id, $step_id)
     {
         $roles = DB::table('workflow_role_assigns as wsr')
@@ -219,21 +283,6 @@ class WorkFlow_RoleAssignController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => $roles,
-        ]);
-    }
-
-    public function getRolesByStep($stepId)
-    {
-        $roles = WorkflowRoleAssign::with([
-            'role:id,name',
-            'assignedUser:id,name',
-        ])
-            ->where('step_id', $stepId)
-            ->get();
-
-        return response()->json([
-            'status' => 'success',
-            'roles' => $roles,
         ]);
     }
 }

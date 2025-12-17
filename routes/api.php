@@ -113,16 +113,19 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::get('/categories/{id}/request-types', [CategoreController::class, 'getRequestTypeByCat']);
         Route::apiResource('request_type', RequestTypeController::class);
         Route::apiResource('workflow', WorkFlowController::class);
+        Route::get('entity/{id}/workflow', action: [WorkFlowController::class, 'getWorkflowByEntity']);
+
+        Route::get('workflow/{id}/steps', action: [WorkFlowStepsController::class, 'getStepByWorkflow']);
+
         Route::apiResource('workflowsteps', WorkFlowStepsController::class);
         Route::get('workflow/{id}/steps', action: [WorkFlowStepsController::class, 'getStepByWorkflow']);
         Route::post('workflowsteps/reorder', [WorkFlowStepsController::class, 'reorder']);
         Route::apiResource('workflow_role/assign', WorkFlow_RoleAssignController::class);
 
-
-        Route::get( 'workflow/{workflow_id}/step/{step_id}/roles',[WorkFlow_RoleAssignController::class, 'getRolesByWorkflowStep']
+        Route::get('workflow/{workflow_id}/step/{step_id}/roles', [WorkFlow_RoleAssignController::class, 'getRolesByWorkflowStep']
         );
 
-        Route::get( 'step/{id}/roles',[WorkFlow_RoleAssignController::class, 'getRolesByStep']
+        Route::get('step/{id}/roles', [WorkFlow_RoleAssignController::class, 'getRolesByStep']
         );
 
         Route::get('/workflowbyTypeandCat', [WorkFlowController::class, 'getWorkflowByTypeAndCategory']);

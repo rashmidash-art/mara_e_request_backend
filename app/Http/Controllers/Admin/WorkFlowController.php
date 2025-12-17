@@ -38,6 +38,7 @@ class WorkFlowController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'entity_id' => 'nullable|integer',
             'categori_id' => 'nullable|integer',
             'request_type_id' => 'nullable|integer',
             'name' => 'nullable|string|max:255',
@@ -98,6 +99,7 @@ class WorkFlowController extends Controller
     public function update(Request $request, string $id)
     {
         $validated = $request->validate([
+            'entity_id' => 'nullable|integer',
             'categori_id' => 'nullable|integer',
             'request_type_id' => 'nullable|integer',
             'name' => 'nullable|string|max:255',
@@ -189,6 +191,18 @@ class WorkFlowController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => $workflow,
+        ]);
+    }
+
+    public function getWorkflowByEntity($id)
+    {
+
+        $data = WorkFlow::where('entity_id', $id)->get();  // filter by entity_id
+
+        return response()->json([
+            'status' => 'success',
+            'steps' => $data,
+            'data' => $data,
         ]);
     }
 }
