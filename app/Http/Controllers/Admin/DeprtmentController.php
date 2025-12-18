@@ -205,15 +205,15 @@ class DeprtmentController extends Controller
                 ],
 
                 'department_code' => [
-                   'sometimes',
-                   'required',
-                   'string',
-                   'max:50',
-                   Rule::unique('departments', 'department_code')
+                    'sometimes',
+                    'required',
+                    'string',
+                    'max:50',
+                    Rule::unique('departments', 'department_code')
                         ->where(fn ($q) => $q->where('entiti_id', $request->entiti_id ?? $department->entiti_id)
                         )
                         ->ignore($department->id),
-               ],
+                ],
 
                 'enable_cost_center' => 'sometimes|integer|in:0,1',
                 'budget' => 'sometimes|numeric|min:0',
@@ -221,9 +221,9 @@ class DeprtmentController extends Controller
                 'status' => 'sometimes|integer|in:0,1',
                 'manager_id' => 'sometimes|nullable|integer|exists:managers,id',
             ], [
-               'name.unique' => 'Department name already exists for this entity.',
-               'department_code.unique' => 'Department code already exists.',
-           ]);
+                'name.unique' => 'Department name already exists for this entity.',
+                'department_code.unique' => 'Department code already exists.',
+            ]);
 
             // Determine the entity
             $entityId = $request->entiti_id ?? $department->entiti_id;
@@ -316,14 +316,49 @@ class DeprtmentController extends Controller
         }
     }
 
+    // public function getByEntity($id)
+    // {
+    //     $departments = Department::where('entiti_id', $id)->get();
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'departments' => $departments,
+    //     ]);
+    // }
+
     public function getByEntity($id)
     {
-        $departments = Department::where('entiti_id', $id)->get();
+        try {
+            $entity = Entiti::findOrFail($id);
+            // Get departments for this entity
+            $departments = Department::where('entiti_id', $id)->get();
+            $allOption = [
+                'id' => 0,
+                'name' => 'All Departments',
+                'budget' => $entity->budget, // entity LOA used here
+                'entiti_id' => $entity->id,
+                'bc_dimention_value' => null,
+                'enable_cost_center' => 0,
+                'description' => null,
+                'status' => 1,
+                'manager_id' => null,
+            ];
 
-        return response()->json([
-            'status' => 'success',
-            'departments' => $departments,
-        ]);
+            $departmentsArray = $departments->toArray();
+            array_unshift($departmentsArray, $allOption);
+
+            return response()->json([
+                'status' => 'success',
+                'departments' => $departmentsArray,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to retrieve departments',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function getUserbyDepartment($id)

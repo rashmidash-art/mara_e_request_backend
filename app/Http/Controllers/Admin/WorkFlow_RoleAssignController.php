@@ -18,8 +18,13 @@ class WorkFlow_RoleAssignController extends Controller
             $assignments = WorkflowRoleAssign::with(['role:id,name', 'workflow:id,name', 'step:id,name'])->get();
 
             $assignments->transform(function ($assignment) {
-                $users = $assignment->assignedUsers();
-                $assignment->assigned_users = $users->pluck('name')->toArray();
+                $users = $assignment->assignedUsers(); // This returns a collection of User models
+                $assignment->assigned_users = $users->map(function ($user) {
+                    return [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                    ];
+                })->toArray();
 
                 return $assignment;
             });
@@ -45,16 +50,23 @@ class WorkFlow_RoleAssignController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
+        // Step 1: Conditional validation
+        $rules = [
             'entity_id' => 'required|integer',
             'workflow_id' => 'required|integer',
             'step_id' => 'required|integer',
             'role_id' => 'required|integer',
-            'approval_logic' => 'required|string',
-            'user_id' => 'required', // Can be single or array
+            'approval_logic' => 'required|string', // 'single', 'or', 'and'
             'remark' => 'nullable|string',
-        ]);
+        ];
 
+        if ($request->input('approval_logic') === 'or') {
+            $rules['user_id'] = 'required|array|min:1';
+        }
+
+        $request->validate($rules);
+
+        // Step 2: Get inputs
         $entity_id = $request->input('entity_id');
         $workflow_id = $request->input('workflow_id');
         $step_id = $request->input('step_id');
@@ -62,14 +74,23 @@ class WorkFlow_RoleAssignController extends Controller
         $approval_logic = $request->input('approval_logic');
         $remark = $request->input('remark', null);
 
-        $user_ids = $request->input('user_id');
+        $user_ids = $request->input('user_id', []); // Will be empty if not provided
 
-        // Ensure $user_ids is always an array
+        // Step 3: Fetch users for entity and role if needed
+        if ($approval_logic === 'single' || $approval_logic === 'and') {
+            // Fetch all users from pivot table for this entity and role
+            $user_ids = DB::table('role_user') // Assuming pivot table is role_user
+                ->where('role_id', $role_id)
+                ->pluck('user_id')
+                ->toArray();
+        }
+
+        // Step 4: Ensure $user_ids is always an array
         if (! is_array($user_ids)) {
             $user_ids = [$user_ids];
         }
 
-        // Loop through each user and insert a record
+        // Step 5: Insert workflow role assignments
         foreach ($user_ids as $user_id) {
             DB::table('workflow_role_assigns')->insert([
                 'entity_id' => $entity_id,
@@ -85,6 +106,7 @@ class WorkFlow_RoleAssignController extends Controller
             ]);
         }
 
+        // Step 6: Return response
         return response()->json([
             'status' => 'success',
             'message' => 'Workflow role assigned successfully.',
@@ -94,82 +116,82 @@ class WorkFlow_RoleAssignController extends Controller
     /**
      * Update workflow role assignment
      */
-    public function update(Request $request, int $id)
-    {
-        try {
-            $assignment = WorkflowRoleAssign::findOrFail($id);
+    // public function update(Request $request, int $id)
+    // {
+    //     try {
+    //         $assignment = WorkflowRoleAssign::findOrFail($id);
 
-            $entity_id = $request->input('entity_id', $assignment->entity_id);
-            $workflow_id = $request->input('workflow_id', $assignment->workflow_id);
-            $step_id = $request->input('step_id', $assignment->step_id);
-            $role_id = $request->input('role_id', $assignment->role_id);
-            $approval_logic = strtolower($request->input('approval_logic', $assignment->approval_logic));
-            $user_ids = array_map('intval', (array) $request->input('user_id')); // ensure array
-            $remark = $request->input('remark', $assignment->remark);
-            $specific_user = ($approval_logic === 'or') ? 1 : 0;
+    //         $entity_id = $request->input('entity_id', $assignment->entity_id);
+    //         $workflow_id = $request->input('workflow_id', $assignment->workflow_id);
+    //         $step_id = $request->input('step_id', $assignment->step_id);
+    //         $role_id = $request->input('role_id', $assignment->role_id);
+    //         $approval_logic = strtolower($request->input('approval_logic', $assignment->approval_logic));
+    //         $user_ids = array_map('intval', (array) $request->input('user_id')); // ensure array
+    //         $remark = $request->input('remark', $assignment->remark);
+    //         $specific_user = ($approval_logic === 'or') ? 1 : 0;
 
-            // Update workflow_role_assigns
-            $assignment->update([
-                'entity_id' => $entity_id,
-                'workflow_id' => $workflow_id,
-                'step_id' => $step_id,
-                'role_id' => $role_id,
-                'approval_logic' => ucfirst($approval_logic),
-                'specific_user' => $specific_user,
-                'user_id' => ($approval_logic === 'or') ? json_encode($user_ids) : null,
-                'remark' => $remark,
-            ]);
+    //         // Update workflow_role_assigns
+    //         $assignment->update([
+    //             'entity_id' => $entity_id,
+    //             'workflow_id' => $workflow_id,
+    //             'step_id' => $step_id,
+    //             'role_id' => $role_id,
+    //             'approval_logic' => ucfirst($approval_logic),
+    //             'specific_user' => $specific_user,
+    //             'user_id' => ($approval_logic === 'or') ? json_encode($user_ids) : null,
+    //             'remark' => $remark,
+    //         ]);
 
-            // Delete old WorkflowUser entries for this step & role
-            WorkflowUser::where('workflow_id', $workflow_id)
-                ->where('step_id', $step_id)
-                ->where('role_id', $role_id)
-                ->delete();
+    //         // Delete old WorkflowUser entries for this step & role
+    //         WorkflowUser::where('workflow_id', $workflow_id)
+    //             ->where('step_id', $step_id)
+    //             ->where('role_id', $role_id)
+    //             ->delete();
 
-            // Determine users to assign
-            $usersToAssign = collect();
+    //         // Determine users to assign
+    //         $usersToAssign = collect();
 
-            if ($approval_logic === 'single' || $approval_logic === 'and') {
-                $usersToAssign = User::whereHas('roles', function ($q) use ($role_id) {
-                    $q->where('role_id', $role_id);
-                })->get();
-            } elseif ($approval_logic === 'or' && ! empty($user_ids)) {
-                $usersToAssign = User::whereIn('id', $user_ids)->get();
-            }
+    //         if ($approval_logic === 'single' || $approval_logic === 'and') {
+    //             $usersToAssign = User::whereHas('roles', function ($q) use ($role_id) {
+    //                 $q->where('role_id', $role_id);
+    //             })->get();
+    //         } elseif ($approval_logic === 'or' && ! empty($user_ids)) {
+    //             $usersToAssign = User::whereIn('id', $user_ids)->get();
+    //         }
 
-            // Insert new WorkflowUser entries
-            foreach ($usersToAssign as $user) {
-                WorkflowUser::updateOrCreate(
-                    [
-                        'workflow_id' => $workflow_id,
-                        'step_id' => $step_id,
-                        'role_id' => $role_id,
-                        'user_id' => $user->id,
-                    ],
-                    [
-                        'entity_id' => $entity_id,
-                        'logic' => ucfirst($approval_logic),
-                        'status' => 'active',
-                    ]
-                );
-            }
+    //         // Insert new WorkflowUser entries
+    //         foreach ($usersToAssign as $user) {
+    //             WorkflowUser::updateOrCreate(
+    //                 [
+    //                     'workflow_id' => $workflow_id,
+    //                     'step_id' => $step_id,
+    //                     'role_id' => $role_id,
+    //                     'user_id' => $user->id,
+    //                 ],
+    //                 [
+    //                     'entity_id' => $entity_id,
+    //                     'logic' => ucfirst($approval_logic),
+    //                     'status' => 'active',
+    //                 ]
+    //             );
+    //         }
 
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Workflow role assignment updated successfully.',
-                'data' => $assignment,
-            ], 200);
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'Workflow role assignment updated successfully.',
+    //             'data' => $assignment,
+    //         ], 200);
 
-        } catch (\Exception $e) {
-            Log::error('WorkflowRoleAssign update error', ['error' => $e->getMessage()]);
+    //     } catch (\Exception $e) {
+    //         Log::error('WorkflowRoleAssign update error', ['error' => $e->getMessage()]);
 
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to update workflow role assignment.',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Failed to update workflow role assignment.',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
 
     public function show(int $id)
     {
@@ -226,19 +248,110 @@ class WorkFlow_RoleAssignController extends Controller
     //     }
     // }
 
-    public function destroy(int $id)
+    /**
+     * Update workflow role assignment
+     */
+    public function update(Request $request, int $id)
     {
         try {
-            $assignment = WorkflowUser::findOrFail($id);
-            $assignment->delete();
+            $assignment = WorkflowRoleAssign::findOrFail($id);
+
+            // Step 1: Validation
+            $rules = [
+                'entity_id' => 'required|integer',
+                'workflow_id' => 'required|integer',
+                'step_id' => 'required|integer',
+                'role_id' => 'required|integer',
+                'approval_logic' => 'required|string',
+                'remark' => 'nullable|string',
+            ];
+
+            if ($request->input('approval_logic') === 'or') {
+                $rules['user_id'] = 'required|array|min:1';
+            }
+
+            $request->validate($rules);
+
+            // Step 2: Get inputs
+            $entity_id = $request->input('entity_id');
+            $workflow_id = $request->input('workflow_id');
+            $step_id = $request->input('step_id');
+            $role_id = $request->input('role_id');
+            $approval_logic = strtolower($request->input('approval_logic'));
+            $remark = $request->input('remark', null);
+            $user_ids = $request->input('user_id', []);
+
+            // Step 3: Fetch users for entity & role if needed
+            if (in_array($approval_logic, ['single', 'and'])) {
+                $user_ids = DB::table('role_user')
+                    ->where('role_id', $role_id)
+                    ->pluck('user_id')
+                    ->toArray();
+            }
+
+            if (! is_array($user_ids)) {
+                $user_ids = [$user_ids];
+            }
+
+            // Step 4: Delete existing assignments for this step & role
+            WorkflowRoleAssign::where('workflow_id', $workflow_id)
+                ->where('step_id', $step_id)
+                ->where('role_id', $role_id)
+                ->delete();
+
+            // Step 5: Insert updated assignments
+            foreach ($user_ids as $user_id) {
+                DB::table('workflow_role_assigns')->insert([
+                    'entity_id' => $entity_id,
+                    'workflow_id' => $workflow_id,
+                    'step_id' => $step_id,
+                    'role_id' => $role_id,
+                    'approval_logic' => ucfirst($approval_logic),
+                    'specific_user' => ($approval_logic === 'or') ? 1 : 0,
+                    'user_id' => ($approval_logic === 'or') ? $user_id : $user_id,
+                    'remark' => $remark,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Workflow role assignment deleted successfully.',
+                'message' => 'Workflow role assignment updated successfully.',
             ], 200);
 
         } catch (\Exception $e) {
-            Log::error('WorkflowUser delete error', ['error' => $e->getMessage()]);
+            Log::error('WorkflowRoleAssign update error', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to update workflow role assignment.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete workflow role assignment(s)
+     */
+    public function destroy(int $id)
+    {
+        try {
+            $assignment = WorkflowRoleAssign::findOrFail($id);
+
+            // Delete all assignments for the same step & role in the workflow
+            WorkflowRoleAssign::where('workflow_id', $assignment->workflow_id)
+                ->where('step_id', $assignment->step_id)
+                ->where('role_id', $assignment->role_id)
+                ->delete();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Workflow role assignment(s) deleted successfully.',
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('WorkflowRoleAssign delete error', ['error' => $e->getMessage()]);
 
             return response()->json([
                 'status' => 'error',

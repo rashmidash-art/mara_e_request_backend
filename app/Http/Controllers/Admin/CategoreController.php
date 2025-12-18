@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\RequestType;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class CategoreController extends Controller
@@ -19,16 +19,17 @@ class CategoreController extends Controller
     {
         try {
             $categories = Category::all();
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Categories retrieved successfully',
-                'data' => $categories
+                'data' => $categories,
             ], 200);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve categories',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -41,7 +42,7 @@ class CategoreController extends Controller
         $request->validate([
             'name' => 'required|string|max:255|unique:categories,name',
             'description' => 'nullable|string',
-            'status' => ['required', Rule::in([0, 1])]
+            'status' => ['required', Rule::in([0, 1])],
         ]);
 
         try {
@@ -54,13 +55,13 @@ class CategoreController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Category created successfully',
-                'data' => $category
+                'data' => $category,
             ], 200);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to create category',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -76,12 +77,12 @@ class CategoreController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Category retrieved successfully',
-                'data' => $category
+                'data' => $category,
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Category not found'
+                'message' => 'Category not found',
             ], 401);
         }
     }
@@ -92,9 +93,9 @@ class CategoreController extends Controller
     public function update(Request $request, string $id)
     {
         $request->validate([
-            'name' => 'sometimes|required|string|max:255|unique:categories,name,' . $id,
+            'name' => 'sometimes|required|string|max:255|unique:categories,name,'.$id,
             'description' => 'nullable|string',
-            'status' => ['sometimes', 'required', Rule::in([0, 1])]
+            'status' => ['sometimes', 'required', Rule::in([0, 1])],
         ]);
 
         try {
@@ -105,18 +106,18 @@ class CategoreController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Category updated successfully',
-                'data' => $category
+                'data' => $category,
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Category not found'
+                'message' => 'Category not found',
             ], 401);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update category',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -132,25 +133,27 @@ class CategoreController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Category deleted successfully'
+                'message' => 'Category deleted successfully',
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Category not found'
+                'message' => 'Category not found',
             ], 401);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete category',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
 
     public function getRequestTypeByCat($id)
     {
-        $getRequestType = RequestType::where('categori_id', $id)->where('status', 1)->get();
+        $getRequestType = RequestType::where('categori_id', $id)
+            ->where('status', 1)
+            ->get();
 
         return response()->json([
             'status' => 'success',

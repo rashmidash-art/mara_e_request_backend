@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\CreateRequestController;
 use App\Http\Controllers\Admin\DeprtmentController;
 use App\Http\Controllers\Admin\DocumentController;
 use App\Http\Controllers\Admin\EntitiesController;
+use App\Http\Controllers\Admin\EntityRequestTypeController;
 use App\Http\Controllers\Admin\EscalationController;
 use App\Http\Controllers\Admin\FileFormatController;
 use App\Http\Controllers\Admin\ManagerController;
@@ -110,7 +111,8 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::get('users/next-employee-id', [UserController::class, 'nextEmployeeId']);
         Route::apiResource('users', UserController::class);
         Route::apiResource('categore', CategoreController::class);
-        Route::get('/categories/{id}/request-types', [CategoreController::class, 'getRequestTypeByCat']);
+        Route::get('/categories/{id}/requestTypes', [CategoreController::class, 'getRequestTypeByCat']);
+
         Route::apiResource('request_type', RequestTypeController::class);
         Route::apiResource('workflow', WorkFlowController::class);
         Route::get('entity/{id}/workflow', action: [WorkFlowController::class, 'getWorkflowByEntity']);
@@ -142,6 +144,8 @@ Route::middleware('auth:api,entiti-api')->group(function () {
             CreateRequestController::class,
             'myActionableRequests',
         ]);
+
+        Route::apiResource('entityReqyestType', controller: EntityRequestTypeController::class);
 
         Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
         Route::post('/request-workflow/{request_id}/action', [RequestWorkflowDetailsController::class, 'takeAction']);
