@@ -1,13 +1,12 @@
 <?php
 
 // use App\Http\Controllers\CategoryController as ControllersCategoryController;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
 
-Route::options('{any}', fn () => response()->json())->where('any', '.*');
-
+use App\Http\Controllers\Admin\BudgetCodeController;
 use App\Http\Controllers\Admin\BudgetController;
 use App\Http\Controllers\Admin\CategoreController;
+// Route::options('{any}', fn () => response()->json())->where('any', '.*');
+
 use App\Http\Controllers\Admin\CreateRequestController;
 use App\Http\Controllers\Admin\DeprtmentController;
 use App\Http\Controllers\Admin\DocumentController;
@@ -28,6 +27,8 @@ use App\Http\Controllers\Admin\WorkFlowStepsController;
 use App\Http\Controllers\Admin\WorkFlowTypeController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetContrller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 Route::post('admin/login', [LoginController::class, 'login']);
 
@@ -146,7 +147,11 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         ]);
 
         Route::apiResource('entityReqyestType', controller: EntityRequestTypeController::class);
+        Route::post('/entityReqyestType/group-delete', [EntityRequestTypeController::class, 'groupDelete']);
+        Route::get('/budgetCode/next', [BudgetCodeController::class, 'nextBudgetCode']);
 
+        Route::apiResource('budgetCode', controller: BudgetCodeController::class);
+        Route::get('budgetCode/preview', [BudgetCodeController::class, 'preview']);
         Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
         Route::post('/request-workflow/{request_id}/action', [RequestWorkflowDetailsController::class, 'takeAction']);
     });

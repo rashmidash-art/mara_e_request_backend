@@ -45,6 +45,12 @@ class Department extends Model
         return $this->belongsTo(Entiti::class, 'entiti_id');
     }
 
+
+    public function budgetCode()
+    {
+        return $this->belongsTo(BudgetCode::class, 'department_id');
+    }
+
     // Department belongs to a manager
     public function manager()
     {

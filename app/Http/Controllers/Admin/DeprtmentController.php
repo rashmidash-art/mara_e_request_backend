@@ -330,12 +330,22 @@ class DeprtmentController extends Controller
     {
         try {
             $entity = Entiti::findOrFail($id);
-            // Get departments for this entity
+
             $departments = Department::where('entiti_id', $id)->get();
+
+            //  If no departments, return empty list (IMPORTANT)
+            if ($departments->isEmpty()) {
+                return response()->json([
+                    'status' => 'success',
+                    'departments' => [],
+                ], 200);
+            }
+
+            //  Add "All Departments" ONLY if departments exist
             $allOption = [
                 'id' => 0,
                 'name' => 'All Departments',
-                'budget' => $entity->budget, // entity LOA used here
+                'budget' => $entity->budget,
                 'entiti_id' => $entity->id,
                 'bc_dimention_value' => null,
                 'enable_cost_center' => 0,
