@@ -380,4 +380,14 @@ class DeprtmentController extends Controller
             'users' => $users,
         ]);
     }
+
+    public function getBudgetCodeByDepartment($id)
+    {
+        $department = Department::with('budgetCodes')->findOrFail($id);
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $department->budgetCodes,
+        ]);
+    }
 }

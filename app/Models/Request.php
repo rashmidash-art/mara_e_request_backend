@@ -18,6 +18,7 @@ class Request extends Model
         'request_type',
         'category',
         'department',
+        'budget_code',
         'amount',
         'description',
         'supplier_id',
@@ -81,6 +82,11 @@ class Request extends Model
         return $this->belongsTo(Category::class, 'category');
     }
 
+    public function budgetCode()
+    {
+        return $this->belongsTo(BudgetCode::class, 'budget_code');
+    }
+
     public function departmentData()
     {
         return $this->belongsTo(Department::class, 'department');
@@ -109,51 +115,45 @@ class Request extends Model
     }
 
     public function getFinalStatus()
-{
-    // Get all workflow steps for the current request
-    $workflowSteps = $this->workflowUsers()
-        ->with('role:id,name')
-        ->orderBy('workflow_step_id', 'asc') // Order by workflow step
-        ->get();
+    {
+        $workflowSteps = $this->workflowUsers()
+            ->with('role:id,name')
+            ->orderBy('workflow_step_id', 'asc') // Order by workflow step
+            ->get();
 
-    // If no workflow steps exist, use the request's status directly
-    if ($workflowSteps->isEmpty()) {
+        if ($workflowSteps->isEmpty()) {
+            return [
+                'final_status' => ucfirst($this->status), // Default status based on request's current status
+                'pending_by' => null,
+            ];
+        }
+
+        if ($workflowSteps->contains('status', 'rejected')) {
+            return [
+                'final_status' => 'Rejected',
+                'pending_by' => null,
+            ];
+        }
+
+        $firstPending = $workflowSteps->firstWhere('status', 'pending');
+        if ($firstPending) {
+            return [
+                'final_status' => 'Pending',
+                'pending_by' => $firstPending->role?->name ?? null, // Return the role of the person who is pending
+            ];
+        }
+
+        if ($workflowSteps->every(fn ($step) => $step->status === 'approved')) {
+            return [
+                'final_status' => 'Approved',
+                'pending_by' => null,
+            ];
+        }
+
         return [
-            'final_status' => ucfirst($this->status), // Default status based on request's current status
+            'final_status' => ucfirst($this->status),
             'pending_by' => null,
         ];
-    }
-
-    // If any workflow step has a status of 'rejected', the final status is 'Rejected'
-    if ($workflowSteps->contains('status', 'rejected')) {
-        return [
-            'final_status' => 'Rejected',
-            'pending_by' => null,
-        ];
-    }
-
-    // If any workflow step is still pending, the final status is 'Pending'
-    $firstPending = $workflowSteps->firstWhere('status', 'pending');
-    if ($firstPending) {
-        return [
-            'final_status' => 'Pending',
-            'pending_by' => $firstPending->role?->name ?? null, // Return the role of the person who is pending
-        ];
-    }
-
-    // If all workflow steps are approved, the final status is 'Approved'
-    if ($workflowSteps->every(fn ($step) => $step->status === 'approved')) {
-        return [
-            'final_status' => 'Approved',
-            'pending_by' => null,
-        ];
-    }
-
-    // Default fallback to the request's status
-    return [
-        'final_status' => ucfirst($this->status),
-        'pending_by' => null,
-    ];
 
     }
 }

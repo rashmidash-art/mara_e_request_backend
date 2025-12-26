@@ -107,6 +107,8 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('department', DeprtmentController::class);
         Route::get('entities/{id}/departments', [DeprtmentController::class, 'getByEntity']);
         Route::get('department/{id}/users', action: [DeprtmentController::class, 'getUserbyDepartment']);
+        Route::get( '/department/{id}/budget-code',[DeprtmentController::class, 'getBudgetCodeByDepartment']);
+
         // For Users
         Route::get('users/search', [UserController::class, 'search']);
         Route::get('users/next-employee-id', [UserController::class, 'nextEmployeeId']);

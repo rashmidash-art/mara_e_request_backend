@@ -14,11 +14,16 @@ class BudgetCode extends Model
 
     public function entity()
     {
-        return $this->belongsTo(Entiti::class, 'entiti_id');
+        return $this->belongsTo(Entiti::class, 'entity_id');
     }
 
     public function department()
     {
         return $this->belongsTo(Department::class, 'department_id');
+    }
+
+    public function requests()
+    {
+        return $this->hasMany(Request::class, 'budget_code', 'id');
     }
 }

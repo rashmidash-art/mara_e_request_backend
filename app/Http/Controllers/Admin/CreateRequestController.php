@@ -27,14 +27,8 @@ class CreateRequestController extends Controller
     {
         try {
             $auth = Auth::user();
-
-            // Detect login types
             $isEntityLogin = $auth instanceof Entiti;
             $isSuperAdmin = ! $isEntityLogin && isset($auth->user_type) && $auth->user_type == 0;
-
-            // -----------------------------------------------
-            // Base Query (ONLY REQUEST TABLE)
-            // -----------------------------------------------
             $query = ModelsRequest::with([
                 'categoryData:id,name',
                 'entityData:id,name',
@@ -57,23 +51,11 @@ class CreateRequestController extends Controller
                 'currentWorkflowRole.assignedUser:id,name',
                 'currentWorkflowRole.workflowStep:id,name',
             ])->orderByDesc('id');
-
-            // -----------------------------------------------
-            //  SUPERADMIN → ALL REQUESTS
-            // -----------------------------------------------
             if ($isSuperAdmin) {
                 $requests = $query->get();
-            }
-            // -----------------------------------------------
-            //  ENTITY LOGIN → requests of that entity
-            // -----------------------------------------------
-            elseif ($isEntityLogin) {
+            } elseif ($isEntityLogin) {
                 $requests = $query->where('entiti', $auth->id)->get();
-            }
-            // -----------------------------------------------
-            //  USER LOGIN → assigned requests
-            // -----------------------------------------------
-            else {
+            } else {
                 $userId = $auth->id;
 
                 $requests = $query->whereHas('currentWorkflowRole', function ($q) use ($userId) {
@@ -82,9 +64,6 @@ class CreateRequestController extends Controller
                 })->get();
             }
 
-            // -----------------------------------------------
-            // FORMAT RESPONSE (INLINE)
-            // -----------------------------------------------
             $data = $requests->map(function ($req) {
 
                 $workflow = $req->currentWorkflowRole;
@@ -105,6 +84,11 @@ class CreateRequestController extends Controller
                     'entity' => [
                         'id' => $req->entiti,
                         'name' => $req->entityData?->name,
+                    ],
+
+                    'budget_code' => [
+                        'id' => $req->budget_code,
+                        'name' => $req->budget_code?->budget_code,
                     ],
 
                     'requested_by' => [
@@ -171,6 +155,7 @@ class CreateRequestController extends Controller
                 'request_type' => 'nullable|integer',
                 'category' => 'nullable|integer',
                 'department' => 'nullable|integer',
+                'budget_code' => 'required|integer',
                 'amount' => 'nullable|string',
                 'description' => 'nullable|string',
                 'supplier_id' => 'nullable|integer',
@@ -179,8 +164,7 @@ class CreateRequestController extends Controller
                 'behalf_of' => 'nullable|in:0,1',
                 'behalf_of_department' => 'required_if:behalf_of,1',
                 'business_justification' => 'nullable|string',
-                'status' => 'nullable|in:submitted,draft,deleted',
-
+                'status' => 'nullable|in:submitted,draft,deleted,withdraw',
                 'attachments' => 'nullable|array',
                 'attachments.*.document_id' => 'required|integer',
                 'attachments.*.file' => 'required|file|max:10240',
@@ -203,6 +187,7 @@ class CreateRequestController extends Controller
                 'request_type' => $request->request_type,
                 'category' => $request->category,
                 'department' => $request->department,
+                'budget_code' => $request->budget_code,
                 'amount' => $request->amount,
                 'description' => $request->description,
                 'supplier_id' => $request->supplier_id,
@@ -236,13 +221,8 @@ class CreateRequestController extends Controller
                         $req->entiti.'_'.
                         $departmentName.'_'.
                         $originalName;
-
-                    $folder = 'requestdocuments'; // single folder
-
-                    // store file
+                    $folder = 'requestdocuments';
                     $file->storeAs($folder, $newFileName, 'public');
-
-                    // insert into DB
                     RequestDocument::create([
                         'request_id' => $req->request_id,
                         'document_id' => $doc['document_id'],
@@ -250,7 +230,6 @@ class CreateRequestController extends Controller
                     ]);
                 }
             }
-
             // ------------------------- FETCH WORKFLOW ------------------------- //
             $workflow = WorkFlow::where('categori_id', $req->category)
                 ->where('request_type_id', $req->request_type)
@@ -264,26 +243,16 @@ class CreateRequestController extends Controller
                 ->first();
 
             if ($workflow) {
-
                 Log::info('Workflow Found', $workflow->toArray());
-
-                // Get all workflow steps
                 $steps = WorkflowStep::where('workflow_id', $workflow->id)
                     ->orderBy('order_id', 'asc')
                     ->get();
-
                 foreach ($steps as $step) {
-
-                    // Get assigned roles for each step
                     $roles = WorkflowRoleAssign::where('workflow_id', $workflow->id)
                         ->where('step_id', $step->id)
                         ->get();
 
                     foreach ($roles as $roleAssign) {
-
-                        // ------------------ NEW LOGIC FOR USER ASSIGNMENT ------------------ //
-
-                        // SINGLE → specific user selected
                         if (
                             $roleAssign->approval_logic === 'single' &&
                             $roleAssign->specific_user == 0 &&
@@ -291,13 +260,9 @@ class CreateRequestController extends Controller
                         ) {
                             $users = collect([User::find($roleAssign->user_id)]);
                         } else {
-                            // AND / OR / fallback → all role users
                             $users = User::where('role_id', $roleAssign->role_id)->get();
                         }
-
-                        // AND → create rows for ALL users
                         if ($roleAssign->approval_logic === 'and') {
-
                             foreach ($users as $u) {
                                 RequestWorkflowDetails::create([
                                     'request_id' => $req->request_id,
@@ -309,11 +274,8 @@ class CreateRequestController extends Controller
                                     'is_sendback' => 0,
                                 ]);
                             }
-                        }
-                        // SINGLE / OR → create only one row
-                        else {
+                        } else {
                             $assignedUser = $users->first();
-
                             RequestWorkflowDetails::create([
                                 'request_id' => $req->request_id,
                                 'workflow_id' => $workflow->id,
@@ -324,7 +286,6 @@ class CreateRequestController extends Controller
                                 'is_sendback' => 0,
                             ]);
                         }
-
                         Log::info('Workflow Detail Inserted', [
                             'request_id' => $req->request_id,
                             'workflow_id' => $workflow->id,
@@ -335,7 +296,6 @@ class CreateRequestController extends Controller
                 }
             }
 
-            // ------------------------- FINAL RESPONSE ------------------------- //
             return response()->json([
                 'status' => 'success',
                 'message' => 'Request created successfully',
@@ -524,8 +484,7 @@ class CreateRequestController extends Controller
             'behalf_of' => 'nullable|integer|in:0,1',
             'behalf_of_department' => 'nullable|integer',
             'business_justification' => 'nullable|string',
-            'status' => 'nullable|in:submitted,draft,deleted',
-
+            'status' => 'nullable|in:submitted,draft,deleted,withdraw',
             'documents' => 'nullable|array',
             'documents.*.document_id' => 'required|integer',
             'documents.*.file' => 'required|file',
@@ -545,21 +504,13 @@ class CreateRequestController extends Controller
         DB::beginTransaction();
 
         try {
-            // Update request
             $req->update($validated);
-
-            // Replace documents only if provided
             if ($request->has('documents')) {
-
                 RequestDocument::where('request_id', $req->id)->delete();
-
                 foreach ($request->documents as $doc) {
-
                     $file = $doc['file'];
                     $originalName = $file->getClientOriginalName();
-
                     $file->storeAs('uploads/request_documents/', $originalName, 'public');
-
                     RequestDocument::create([
                         'request_id' => $req->id,
                         'document_id' => $doc['document_id'],
@@ -567,9 +518,7 @@ class CreateRequestController extends Controller
                     ]);
                 }
             }
-
             DB::commit();
-
             return response()->json([
                 'status' => 'success',
                 'message' => 'Request updated successfully',
@@ -578,7 +527,6 @@ class CreateRequestController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Request Update Failed', ['error' => $e->getMessage()]);
-
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update request',
@@ -658,7 +606,6 @@ class CreateRequestController extends Controller
                 },
             ]);
 
-            // Different query logic based on user type
             if ($isSuperAdmin) {
                 $requests = $baseQuery->orderByDesc('id')->get();
             } elseif ($isEntityLogin) {

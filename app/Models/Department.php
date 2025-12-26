@@ -2,13 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Department extends Model
 {
-
     use HasFactory;
+
     protected $fillable = [
         'entiti_id',
         'manager_id',
@@ -19,9 +19,8 @@ class Department extends Model
         'work_flow_type_id',
         'budget',
         'description',
-        'status'
+        'status',
     ];
-
 
     public static function generateBcDimension($departmentCode)
     {
@@ -36,19 +35,17 @@ class Department extends Model
             $next = 1;
         }
 
-        return $departmentCode . '-' . str_pad($next, 3, '0', STR_PAD_LEFT);
+        return $departmentCode.'-'.str_pad($next, 3, '0', STR_PAD_LEFT);
     }
-
 
     public function entity()
     {
         return $this->belongsTo(Entiti::class, 'entiti_id');
     }
 
-
-    public function budgetCode()
+    public function budgetCodes()
     {
-        return $this->belongsTo(BudgetCode::class, 'department_id');
+        return $this->hasMany(BudgetCode::class, 'department_id');
     }
 
     // Department belongs to a manager

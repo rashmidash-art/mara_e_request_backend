@@ -27,5 +27,7 @@ class DatabaseSeeder extends Seeder
         // $this->call(RequestTypeSeeder::class);
         // $this->call(RequestWorkflowSeeder::class);
         // $this->call(AdminloginSeeder::class);
+        $this->call(BudgetCodePermissionSeeder::class);
+        $this->call(EntityRequestTypePermissionSeeder::class);
     }
 }
