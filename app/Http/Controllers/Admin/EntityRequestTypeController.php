@@ -13,13 +13,20 @@ class EntityRequestTypeController extends Controller
      */
     public function index(Request $request)
     {
+        $user = $request->user();
+
         $query = EntityRequest::with(['entity', 'category', 'requestType']);
 
-        if ($request->has('entity_id') && $request->entity_id) {
+        //  If normal user → force entity_id
+        if ($user instanceof \App\Models\User && $user->user_type === 'user') {
+            $query->where('entity_id', $user->entiti_id);
+        }
+        //  Admin / Entity can pass entity_id
+        elseif ($request->filled('entity_id')) {
             $query->where('entity_id', $request->entity_id);
         }
 
-        if ($request->has('categore_id') && $request->categore_id) {
+        if ($request->filled('categore_id')) {
             $query->where('categore_id', $request->categore_id);
         }
 

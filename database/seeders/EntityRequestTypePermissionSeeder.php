@@ -14,27 +14,27 @@ class EntityRequestTypePermissionSeeder extends Seeder
     {
         $permissions = [
             [
-                'name' => 'entity-request-type.view',
+                'name' => 'entityReqyestType.view',
                 'display_name' => 'View Entity Request Types',
                 'description' => 'Allows viewing entity request type mappings',
             ],
             [
-                'name' => 'entity-request-type.create',
+                'name' => 'entityReqyestType.create',
                 'display_name' => 'Create Entity Request Types',
                 'description' => 'Allows creating entity & category request type mappings',
             ],
             [
-                'name' => 'entity-request-type.update',
+                'name' => 'entityReqyestType.update',
                 'display_name' => 'Update Entity Request Types',
                 'description' => 'Allows updating entity request type mappings',
             ],
             [
-                'name' => 'entity-request-type.delete',
+                'name' => 'entityReqyestType.delete',
                 'display_name' => 'Delete Entity Request Types',
                 'description' => 'Allows deleting entity request type mappings',
             ],
             [
-                'name' => 'entity-request-type.group-delete',
+                'name' => 'entityReqyestType.group-delete',
                 'display_name' => 'Group Delete Entity Request Types',
                 'description' => 'Allows deleting all request types for an entity and category',
             ],
