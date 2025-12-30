@@ -2,12 +2,13 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Entiti;
+use App\Models\Permission;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use App\Models\Permission;
-use App\Models\User;
-use App\Models\Entiti;
+use Illuminate\Support\Str;
 
 class PermissionMiddleware
 {
@@ -15,23 +16,24 @@ class PermissionMiddleware
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 401);
         }
 
         // ===== LOG: User + Route =====
         Log::info(' Permission Check', [
-            'user_id'   => $user->id,
+            'user_id' => $user->id,
             'user_type' => $user instanceof User ? $user->user_type : 'entity',
-            'route'     => $request->route()->getName(),
-            'method'    => $request->method()
+            'route' => $request->route()->getName(),
+            'method' => $request->method(),
         ]);
 
         // ======================================
         //  1. SUPER ADMIN → FULL ACCESS
         // ======================================
         if ($user instanceof User && $user->user_type === 0) {
-            Log::info(" SUPER ADMIN bypass");
+            Log::info(' SUPER ADMIN bypass');
+
             return $next($request);
         }
 
@@ -46,19 +48,22 @@ class PermissionMiddleware
 
             // allow only its own entity view
             if ($request->route()->getName() === 'entity.itself') {
-                Log::info(" ENTITY allowed own details");
+                Log::info(' ENTITY allowed own details');
+
                 return $next($request);
             }
 
             // allow only "entities.view"
             if ($permission === 'entities.view') {
-                Log::info(" ENTITY allowed entity list");
+                Log::info(' ENTITY allowed entity list');
+
                 return $next($request);
             }
 
             // block other entity actions
             if (str_starts_with($permission, 'entities.')) {
                 Log::warning(" ENTITY blocked: $permission");
+
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Forbidden – You cannot access other entity details',
@@ -66,7 +71,8 @@ class PermissionMiddleware
             }
 
             // allow all other modules
-            Log::info(" ENTITY allowed general access");
+            Log::info(' ENTITY allowed general access');
+
             return $next($request);
         }
 
@@ -88,10 +94,10 @@ class PermissionMiddleware
                 ->pluck('name')
                 ->toArray();
 
-            Log::info(" User Permissions:", $userPermissions);
+            Log::info(' User Permissions:', $userPermissions);
 
             // Check if user has required permission
-            if (!in_array($permission, $userPermissions)) {
+            if (! $this->permissionExists($permission, $userPermissions)) {
                 Log::warning(" Permission Denied: $permission");
 
                 return response()->json([
@@ -102,6 +108,7 @@ class PermissionMiddleware
             }
 
             Log::info(" Permission Granted: $permission");
+
             return $next($request);
         }
 
@@ -111,6 +118,33 @@ class PermissionMiddleware
     /**
      * Resolve the permission name based on route name or URI.
      */
+    protected function permissionExists(string $required, array $available): bool
+    {
+        $variants = $this->permissionVariants($required);
+
+        foreach ($variants as $variant) {
+            if (in_array($variant, $available)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function permissionVariants(string $permission): array
+    {
+        [$module, $action] = explode('.', $permission);
+
+        $singular = Str::singular($module);
+        $plural = Str::plural($module);
+
+        return array_unique([
+            "{$module}.{$action}",
+            "{$singular}.{$action}",
+            "{$plural}.{$action}",
+        ]);
+    }
+
     protected function resolvePermission(Request $request)
     {
         //  If route has a name (recommended)
@@ -125,10 +159,10 @@ class PermissionMiddleware
 
             // Convert index/show → view, store → create, etc.
             $actionMap = [
-                'index'   => 'view',
-                'show'    => 'view',
-                'store'   => 'create',
-                'update'  => 'update',
+                'index' => 'view',
+                'show' => 'view',
+                'store' => 'create',
+                'update' => 'update',
                 'destroy' => 'delete',
             ];
 
@@ -144,15 +178,15 @@ class PermissionMiddleware
         $module = $segments[0] ?? 'unknown';
 
         // force plural (entity → entities)
-        if (!str_ends_with($module, 's')) {
+        if (! str_ends_with($module, 's')) {
             $module .= 's';
         }
 
         $methodMap = [
-            'GET'    => 'view',
-            'POST'   => 'create',
-            'PUT'    => 'update',
-            'PATCH'  => 'update',
+            'GET' => 'view',
+            'POST' => 'create',
+            'PUT' => 'update',
+            'PATCH' => 'update',
             'DELETE' => 'delete',
         ];
 
