@@ -166,7 +166,7 @@ class UserController extends Controller
             $request->validate([
                 'name' => 'sometimes|required|string|max:255',
                 'designation' => 'sometimes|required|string|max:255',
-
+                'password' => 'sometimes|required|string|min:6',
                 'email' => [
                     'sometimes',
                     'required',
@@ -174,7 +174,7 @@ class UserController extends Controller
                     Rule::unique('users', 'email')->ignoreModel($user),
                 ],
 
-                'password' => 'sometimes|required|string|min:6',
+                // 'password' => 'sometimes|required|string|min:6',
 
                 // 'employee_id' => [
                 //     'sometimes',
