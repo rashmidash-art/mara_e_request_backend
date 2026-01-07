@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Escalations extends Model
 {
@@ -12,6 +12,7 @@ class Escalations extends Model
     protected $fillable = [
 
         'workflow_id',
+        'entity_id',
         'step_id',
         'role_id',
         'user_id',
@@ -25,6 +26,11 @@ class Escalations extends Model
         'status',
 
     ];
+
+    public function entityData()
+    {
+        return $this->belongsTo(Entiti::class, 'entiti');
+    }
 
     public function workflow()
     {
@@ -46,4 +52,3 @@ class Escalations extends Model
         return $this->belongsTo(User::class, 'user_id', 'id');
     }
 }
-

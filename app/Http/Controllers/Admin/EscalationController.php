@@ -27,6 +27,7 @@ class EscalationController extends Controller
         $validated = $request->validate([
             'workflow_id' => 'nullable|integer|exists:work_flows,id',
             'step_id' => 'nullable|integer|exists:workflow_steps,id',
+            'entity_id' => 'nullable|integer|exists:entitis,id',
             'role_id' => 'nullable|integer|exists:roles,id',
             'user_id' => 'nullable|integer', // will check in workflow_role_assigns
             'description' => 'nullable|string',
@@ -86,6 +87,7 @@ class EscalationController extends Controller
 
             $validated = $request->validate([
                 'workflow_id' => 'sometimes|integer|exists:work_flows,id',
+                'entity_id' => 'sometimes|integer|exists:entitis,id',
                 'step_id' => 'sometimes|integer|exists:workflow_steps,id',
                 'role_id' => 'sometimes|integer|exists:roles,id',
                 'user_id' => 'nullable|integer',

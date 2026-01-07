@@ -325,7 +325,8 @@ class WorkFlowStepsController extends Controller
     }
     public function getStepByWorkflow($id)
     {
-        $steps = WorkflowStep::where('workflow_id', $id)->get();
+        $steps = WorkflowStep::where('workflow_id', $id)->
+        where('escalation','enable')->get();
 
         return response()->json([
             'status' => 'success',
