@@ -118,7 +118,7 @@ class Request extends Model
     {
         $workflowSteps = $this->workflowUsers()
             ->with('role:id,name')
-            ->orderBy('workflow_step_id', 'asc') // Order by workflow step
+            ->orderBy('workflow_step_id', 'asc') 
             ->get();
 
         if ($workflowSteps->isEmpty()) {

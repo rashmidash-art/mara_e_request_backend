@@ -15,7 +15,6 @@ use App\Models\WorkflowRoleAssign;
 use App\Models\WorkflowStep;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class CreateRequestController extends Controller
@@ -36,6 +35,7 @@ class CreateRequestController extends Controller
                 'requestTypeData:id,name',
                 'departmentData:id,name',
                 'supplierData:id,name',
+                'budgetCode:id,budget_code',
                 'documents:id,request_id,document_id,document', // Eager load the documents
                 'currentWorkflowRole' => function ($q) {
                     $q->select(
@@ -76,6 +76,11 @@ class CreateRequestController extends Controller
                     'status' => $req->status,
                     'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
 
+                    'user' => [
+                        'id' => $req->user,
+                        'name' => $req->userData?->name,
+                    ],
+
                     'category' => [
                         'id' => $req->category,
                         'name' => $req->categoryData?->name,
@@ -88,7 +93,7 @@ class CreateRequestController extends Controller
 
                     'budget_code' => [
                         'id' => $req->budget_code,
-                        'name' => $req->budget_code?->budget_code,
+                        'name' => $req->budgetCode?->budget_code,
                     ],
 
                     'requested_by' => [
@@ -155,7 +160,6 @@ class CreateRequestController extends Controller
                 'request_type' => 'nullable|integer',
                 'category' => 'nullable|integer',
                 'department' => 'nullable|integer',
-                'budget_code' => 'required|integer',
                 'amount' => 'nullable|string',
                 'description' => 'nullable|string',
                 'supplier_id' => 'nullable|integer',
@@ -168,14 +172,12 @@ class CreateRequestController extends Controller
                 'attachments' => 'nullable|array',
                 'attachments.*.document_id' => 'required|integer',
                 'attachments.*.file' => 'required|file|max:10240',
+                'budget_code' => 'required|exists:budget_codes,id',
             ]);
 
             // ------------------------- CREATE REQUEST ID ------------------------- //
             $year = date('Y');
-            $last = ModelsRequest::whereYear('created_at', $year)
-                ->orderBy('id', 'desc')
-                ->first();
-
+            $last = ModelsRequest::whereYear('created_at', $year)->orderBy('id', 'desc')->first();
             $nextNumber = $last ? $last->id + 1 : 1;
             $request_no = "REQ-{$year}-".str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
 
@@ -199,11 +201,8 @@ class CreateRequestController extends Controller
                 'status' => $request->status ?? 'draft',
             ]);
 
-            Log::info('Request Created:', ['request_id' => $req->request_id]);
-
-            // ------------------------- HANDLE ATTACHMENTS ------------------------- //
+            // ------------------------- ATTACHMENTS ------------------------- //
             if (! empty($request->attachments)) {
-
                 foreach ($request->attachments as $index => $doc) {
 
                     $file = $request->file("attachments.$index.file");
@@ -211,18 +210,12 @@ class CreateRequestController extends Controller
                         continue;
                     }
 
-                    $originalName = $file->getClientOriginalName();
-
                     $departmentName = Department::find($req->department)->name ?? 'unknown';
                     $departmentName = str_replace(' ', '_', strtolower($departmentName));
 
-                    // final filename = REQ-XXXX_entiti_dept_filename
-                    $newFileName = $req->request_id.'_'.
-                        $req->entiti.'_'.
-                        $departmentName.'_'.
-                        $originalName;
-                    $folder = 'requestdocuments';
-                    $file->storeAs($folder, $newFileName, 'public');
+                    $newFileName = $req->request_id.'_'.$req->entiti.'_'.$departmentName.'_'.$file->getClientOriginalName();
+                    $file->storeAs('requestdocuments', $newFileName, 'public');
+
                     RequestDocument::create([
                         'request_id' => $req->request_id,
                         'document_id' => $doc['document_id'],
@@ -230,67 +223,79 @@ class CreateRequestController extends Controller
                     ]);
                 }
             }
+
             // ------------------------- FETCH WORKFLOW ------------------------- //
             $workflow = WorkFlow::where('categori_id', $req->category)
                 ->where('request_type_id', $req->request_type)
                 ->first();
 
-            // ------------------------- INSERT REQUEST WORKFLOW DETAILS ------------------------- //
+            if (! $workflow) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Workflow not configured',
+                ], 422);
+            }
 
-            // Get workflow by BOTH category + request type
-            $workflow = WorkFlow::where('categori_id', $req->category)
-                ->where('request_type_id', $req->request_type)
-                ->first();
+            // ------------------------- WORKFLOW DETAILS ------------------------- //
+            $steps = WorkflowStep::where('workflow_id', $workflow->id)
+                ->orderBy('order_id', 'asc')
+                ->get();
 
-            if ($workflow) {
-                Log::info('Workflow Found', $workflow->toArray());
-                $steps = WorkflowStep::where('workflow_id', $workflow->id)
-                    ->orderBy('order_id', 'asc')
+            foreach ($steps as $step) {
+
+                $roleAssigns = WorkflowRoleAssign::where('workflow_id', $workflow->id)
+                    ->where('step_id', $step->id)
                     ->get();
-                foreach ($steps as $step) {
-                    $roles = WorkflowRoleAssign::where('workflow_id', $workflow->id)
-                        ->where('step_id', $step->id)
-                        ->get();
 
-                    foreach ($roles as $roleAssign) {
-                        if (
-                            $roleAssign->approval_logic === 'single' &&
-                            $roleAssign->specific_user == 0 &&
-                            $roleAssign->user_id
-                        ) {
-                            $users = collect([User::find($roleAssign->user_id)]);
-                        } else {
-                            $users = User::where('role_id', $roleAssign->role_id)->get();
-                        }
-                        if ($roleAssign->approval_logic === 'and') {
-                            foreach ($users as $u) {
-                                RequestWorkflowDetails::create([
-                                    'request_id' => $req->request_id,
-                                    'workflow_id' => $workflow->id,
-                                    'workflow_step_id' => $step->id,
-                                    'workflow_role_id' => $roleAssign->role_id,
-                                    'assigned_user_id' => $u->id,
-                                    'status' => 'pending',
-                                    'is_sendback' => 0,
-                                ]);
-                            }
-                        } else {
-                            $assignedUser = $users->first();
+                foreach ($roleAssigns as $roleAssign) {
+
+                    $approvalLogic = strtolower($roleAssign->approval_logic);
+                    $users = collect();
+
+                    // -------- SPECIFIC USER LOGIC -------- //
+                    if ($roleAssign->specific_user == 1 && $roleAssign->user_id) {
+
+                        $userIds = json_decode($roleAssign->user_id, true);
+                        $userIds = is_array($userIds) ? $userIds : [$roleAssign->user_id];
+
+                        $users = User::whereIn('id', $userIds)->get();
+
+                    } else {
+                        // -------- ROLE BASED USERS -------- //
+                        $users = User::whereHas('roles', function ($q) use ($roleAssign) {
+                            $q->where('roles.id', $roleAssign->role_id);
+                        })->get();
+                    }
+
+                    if ($users->isEmpty()) {
+                        continue;
+                    }
+
+                    // -------- AND LOGIC -------- //
+                    if ($approvalLogic === 'and') {
+
+                        foreach ($users as $user) {
                             RequestWorkflowDetails::create([
                                 'request_id' => $req->request_id,
                                 'workflow_id' => $workflow->id,
                                 'workflow_step_id' => $step->id,
                                 'workflow_role_id' => $roleAssign->role_id,
-                                'assigned_user_id' => $assignedUser ? $assignedUser->id : null,
+                                'assigned_user_id' => $user->id,
                                 'status' => 'pending',
                                 'is_sendback' => 0,
                             ]);
                         }
-                        Log::info('Workflow Detail Inserted', [
+
+                    } else {
+                        // -------- SINGLE / OR LOGIC -------- //
+                        RequestWorkflowDetails::create([
                             'request_id' => $req->request_id,
                             'workflow_id' => $workflow->id,
-                            'step_id' => $step->id,
-                            'role_id' => $roleAssign->role_id,
+                            'workflow_step_id' => $step->id,
+                            'workflow_role_id' => $roleAssign->role_id,
+                            'assigned_user_id' => $users->first()->id,
+                            'status' => 'pending',
+                            'is_sendback' => 0,
                         ]);
                     }
                 }
@@ -301,6 +306,7 @@ class CreateRequestController extends Controller
                 'message' => 'Request created successfully',
                 'data' => $req,
             ], 201);
+
         } catch (\Exception $e) {
 
             Log::error('Request Store Error', ['error' => $e->getMessage()]);
@@ -314,7 +320,7 @@ class CreateRequestController extends Controller
     }
 
     /** Create a new request */
-       public function show($id)
+    public function show($id)
     {
         try {
             $req = ModelsRequest::find($id);

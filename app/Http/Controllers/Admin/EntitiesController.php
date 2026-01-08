@@ -8,7 +8,6 @@ use App\Models\Document;
 use App\Models\Entiti;
 use App\Models\Supplier;
 use App\Models\User;
-use App\Models\WorkFlow;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -24,12 +23,11 @@ class EntitiesController extends Controller
     //     $this->middleware(['auth', 'role:admin']);
     // }
 
-
     public function itself(Request $request)
     {
         return response()->json([
             'status' => 'success',
-            'data' => $request->user()
+            'data' => $request->user(),
         ]);
     }
 
@@ -39,35 +37,32 @@ class EntitiesController extends Controller
     //     return response()->json(['status' => 'success', 'data' => $entities]);
     // }
 
-
     public function index(Request $request)
-{
-    $user = $request->user();
+    {
+        $user = $request->user();
 
-    // ADMIN → return all entities
-    if ($user instanceof User && $user->user_type == 0) {
+        // ADMIN → return all entities
+        if ($user instanceof User && $user->user_type == 0) {
+            return response()->json([
+                'status' => 'success',
+                'data' => Entiti::all(),
+            ]);
+        }
+
+        // ENTITI → only his own details
+        if ($user instanceof Entiti) {
+            return response()->json([
+                'status' => 'success',
+                'data' => [$user],
+            ]);
+        }
+
         return response()->json([
-            'status' => 'success',
-            'data' => Entiti::all()
-        ]);
+            'status' => 'error',
+            'message' => 'Forbidden – You cannot access entity list',
+            'required_permission' => 'entities.view',
+        ], 403);
     }
-
-    // ENTITI → only his own details
-    if ($user instanceof Entiti) {
-        return response()->json([
-            'status' => 'success',
-            'data' => [$user]
-        ]);
-    }
-
-    return response()->json([
-        'status' => 'error',
-        'message' => 'Forbidden – You cannot access entity list',
-        'required_permission' => 'entities.view'
-    ], 403);
-}
-
-
 
     /**
      * Store a newly created resource in storage.
@@ -76,19 +71,28 @@ class EntitiesController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:entitis,email',
-            'password' => 'nullable|string|min:6',
+
+            'email' => [
+                'required',
+                'email:rfc,dns',
+                'unique:entitis,email',
+            ],
+            'password' => 'required|string|min:6',
             'company_code' => 'nullable|string|max:50',
-            'budget' => 'nullable|numeric',
+            'budget' => [
+                'required',
+                'numeric',
+                'min:0',
+                'max:99999999.99',
+            ],
             'description' => 'nullable|string',
-            'status' => ['nullable', Rule::in([0, 1])]
+            'status' => ['required', Rule::in([0, 1])],
         ]);
 
         $entity = Entiti::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => isset($validated['password']) ? Hash::make($validated['password']) : null,
-
             'company_code' => $validated['company_code'] ?? null,
             'budget' => $validated['budget'] ?? 0,
             'description' => $validated['description'] ?? null,
@@ -98,7 +102,7 @@ class EntitiesController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Entity created successfully',
-            'data' => $entity
+            'data' => $entity,
         ], 201);
     }
 
@@ -121,12 +125,28 @@ class EntitiesController extends Controller
 
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'email' => ['sometimes', 'required', 'email', Rule::unique('entitis', 'email')->ignore($entity->id)],
+
+            'email' => [
+                'sometimes',
+                'required',
+                'email:rfc,dns',
+                Rule::unique('entitis', 'email')->ignore($entity->id),
+            ],
+
             'password' => 'nullable|string|min:6',
+
             'company_code' => 'nullable|string|max:50',
-            'budget' => 'nullable|numeric',
+
+            'budget' => [
+                'required',
+                'numeric',
+                'min:0',
+                'max:99999999.99',
+            ],
+
             'description' => 'nullable|string',
-            'status' => ['nullable', Rule::in([0, 1])]
+
+            'status' => ['required', Rule::in([0, 1])],
         ]);
 
         $entity->update([
@@ -142,7 +162,7 @@ class EntitiesController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Entity updated successfully',
-            'data' => $entity->refresh()
+            'data' => $entity->refresh(),
         ], 200);
     }
 
@@ -159,7 +179,6 @@ class EntitiesController extends Controller
     //         'message' => 'Entity deleted successfully',
     //     ]);
     // }
-
 
     public function destroy($id)
     {
@@ -182,7 +201,7 @@ class EntitiesController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'An error occurred while deleting the entity: ' . $e->getMessage(),
+                'message' => 'An error occurred while deleting the entity: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -190,7 +209,7 @@ class EntitiesController extends Controller
     /**
      * Check if there are any related records in users, departments, or workflows.
      *
-     * @param int $entityId
+     * @param  int  $entityId
      * @return bool
      */
     private function checkForRelatedRecords($entityId)
@@ -207,9 +226,9 @@ class EntitiesController extends Controller
         if (Document::where('entiti_id', $entityId)->exists()) {
             return true;
         }
+
         return false;
     }
-
 
     public function getUserbyEntiti($id)
     {
@@ -218,7 +237,7 @@ class EntitiesController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => $users,
-            'users' => $users
+            'users' => $users,
         ]);
     }
 }
