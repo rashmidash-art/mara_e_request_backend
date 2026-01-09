@@ -15,6 +15,7 @@ use App\Models\WorkflowRoleAssign;
 use App\Models\WorkflowStep;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class CreateRequestController extends Controller
@@ -356,7 +357,7 @@ class CreateRequestController extends Controller
     /** Update request */
     public function update(Request $request, $id)
     {
-        //  Find by request_id (string)
+        // Find by request_id (string)
         $req = ModelsRequest::where('request_id', $id)->first();
 
         if (! $req) {
@@ -366,10 +367,14 @@ class CreateRequestController extends Controller
             ], 404);
         }
 
-        //  Handle withdraw separately
+        /**
+         * ===============================
+         * WITHDRAW REQUEST (SPECIAL FLOW)
+         * ===============================
+         */
         if ($request->status === 'withdraw') {
 
-            // Allow withdraw ONLY if submitted
+            // Allow withdraw ONLY when submitted
             if ($req->status !== 'submitted') {
                 return response()->json([
                     'status' => 'error',
@@ -377,11 +382,22 @@ class CreateRequestController extends Controller
                 ], 422);
             }
 
-            $req->update(['status' => 'withdraw']);
+            DB::transaction(function () use ($req) {
 
-            // Optional: cancel workflow
-            RequestWorkflowDetails::where('request_id', $req->request_id)
-                ->update(['status' => 'cancelled']);
+                //  Update request master
+                $req->update([
+                    'status' => 'withdraw',
+                    'updated_at' => now(),
+                ]);
+
+                //  Update ONLY pending workflow steps
+                RequestWorkflowDetails::where('request_id', $req->request_id)
+                    ->where('status', 'pending')
+                    ->update([
+                        'status' => 'withdraw',
+                        'updated_at' => now(),
+                    ]);
+            });
 
             return response()->json([
                 'status' => 'success',
@@ -389,7 +405,11 @@ class CreateRequestController extends Controller
             ]);
         }
 
-        // 🔹 Normal update flow (existing logic)
+        /**
+         * ===============================
+         * NORMAL UPDATE (DRAFT / SUBMIT)
+         * ===============================
+         */
         $validated = $request->validate([
             'entiti' => 'nullable',
             'user' => 'nullable|integer',
@@ -472,8 +492,6 @@ class CreateRequestController extends Controller
             $userId = $auth->id;
             $isEntityLogin = $auth instanceof Entiti;
             $isSuperAdmin = (! $isEntityLogin && isset($auth->user_type) && $auth->user_type == 0);
-
-            // Fetching requests and their details
             $baseQuery = ModelsRequest::with([
                 'categoryData:id,name',
                 'entityData:id,name',
@@ -483,26 +501,31 @@ class CreateRequestController extends Controller
                 'supplierData:id,name',
                 'documents:id,request_id,document_id,document',
                 'workflowHistory' => function ($q) {
-                    $q->with(['role', 'assignedUser', 'workflowStep'])->orderBy('id', 'asc');
+                    $q->with(['role', 'assignedUser', 'workflowStep'])
+                        ->orderBy('id', 'asc');
                 },
             ]);
-
             if ($isSuperAdmin) {
                 $requests = $baseQuery->orderByDesc('id')->get();
             } elseif ($isEntityLogin) {
-                $requests = $baseQuery->where('entiti', $auth->id)->orderByDesc('id')->get();
+                $requests = $baseQuery
+                    ->where('entiti', $auth->id)
+                    ->orderByDesc('id')
+                    ->get();
             } else {
-                $requests = $baseQuery->where(function ($q) use ($userId) {
-                    $q->where('user', $userId)
-                        ->orWhereHas('currentWorkflowRole', function ($w) use ($userId) {
-                            $w->where('assigned_user_id', $userId)
-                                ->where('status', 'pending');
-                        });
-                })->orderByDesc('id')->get();
+                $requests = $baseQuery
+                    ->where(function ($q) use ($userId) {
+                        $q->where('user', $userId)
+                            ->orWhereHas('currentWorkflowRole', function ($w) use ($userId) {
+                                $w->where('assigned_user_id', $userId)
+                                    ->where('status', 'pending');
+                            });
+                    })
+                    ->orderByDesc('id')
+                    ->get();
             }
-
-            // Count query for pending, approved, and rejected workflow steps
             $countQuery = ModelsRequest::query();
+
             if ($isEntityLogin) {
                 $countQuery->where('entiti', $auth->id);
             } elseif (! $isSuperAdmin) {
@@ -517,29 +540,20 @@ class CreateRequestController extends Controller
 
             $counts = [
                 'total' => $countQuery->count(),
-                'draft' => $countQuery->clone()->where('status', 'draft')->count(),
-                'submitted' => $countQuery->clone()->where('status', 'submitted')->count(),
-                'approved' => $countQuery->clone()->where('status', 'approved')->count(),
-                'rejected' => $countQuery->clone()->where('status', 'rejected')->count(),
-                'pending' => $countQuery->clone()->whereHas('workflowHistory', function ($query) {
-                    // Check for 'pending' status in the workflow history
-                    $query->where('status', 'pending');
+                'draft' => (clone $countQuery)->where('status', 'draft')->count(),
+                'submitted' => (clone $countQuery)->where('status', 'submitted')->count(),
+                'approved' => (clone $countQuery)->where('status', 'approved')->count(),
+                'rejected' => (clone $countQuery)->where('status', 'rejected')->count(),
+                'pending' => (clone $countQuery)->whereHas('workflowHistory', function ($q) {
+                    $q->where('status', 'pending');
                 })->count(),
             ];
-
-            // Get total amount per user, per entity, and for the admin
             $userTotalAmount = ModelsRequest::where('user', $userId)->sum('amount');
-
-            $entityTotalAmount = ModelsRequest::where('entiti', $auth->id)
-                ->sum('amount'); // If user is associated with an entity, calculate entity total
-
-            $adminTotalAmount = ModelsRequest::sum('amount'); // Admin total (all requests)
-
-            // Map through the requests and build the response data
+            $entityTotalAmount = ModelsRequest::where('entiti', $auth->id)->sum('amount');
+            $adminTotalAmount = ModelsRequest::sum('amount');
             $data = $requests->map(function ($req) {
-                $workflowHistory = $req->workflowHistory;
 
-                // Build the approval timeline with the first step as submission by the user
+                $workflowHistory = $req->workflowHistory;
                 $approvalTimeline = collect([
                     [
                         'stage' => 'Submitted',
@@ -559,18 +573,25 @@ class CreateRequestController extends Controller
                         ];
                     })
                 );
-
-                // Get the final status of the request based on its workflow steps
                 $finalStatus = $req->getFinalStatus();
 
+                $currentStage = match ($finalStatus['final_status']) {
+                    'withdraw' => 'Withdrawn',
+                    'approved' => 'Completed',
+                    'rejected' => 'Rejected',
+                    default => $finalStatus['pending_by'],
+                };
                 return [
                     'request_id' => $req->request_id,
                     'amount' => $req->amount,
                     'priority' => $req->priority,
                     'description' => $req->description,
                     'status' => $req->status,
+
                     'final_status' => $finalStatus['final_status'],
-                    'pending_by' => $finalStatus['pending_by'],
+                    'pending_by' => $finalStatus['pending_by'], // backward compatible
+                    'current_stage' => $currentStage,               // NEW (use this in UI)
+
                     'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
 
                     'category' => [
@@ -603,20 +624,16 @@ class CreateRequestController extends Controller
                         'name' => $req->supplierData?->name,
                     ],
 
-                    'workflow_history' => $approvalTimeline->values(), // Reindex keys
+                    'workflow_history' => $approvalTimeline->values(),
 
                     'documents' => $req->documents->map(function ($doc) {
-                        $filename = last(explode('_', $doc->document));
-
                         return [
                             'document_id' => $doc->document_id,
-                            'document' => $filename,
+                            'document' => last(explode('_', $doc->document)),
                         ];
                     }),
                 ];
             });
-
-            // Return the JSON response with the counts, total amounts, and data
             return response()->json([
                 'status' => 'success',
                 'counts' => $counts,
@@ -629,6 +646,7 @@ class CreateRequestController extends Controller
             ]);
 
         } catch (\Exception $e) {
+
             Log::error('Request index failed: '.$e->getMessage());
 
             return response()->json([
