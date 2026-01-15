@@ -70,6 +70,7 @@ class CreateRequestController extends Controller
                 $workflow = $req->currentWorkflowRole;
 
                 return [
+                    'id' => $req->id,
                     'request_id' => $req->request_id,
                     'amount' => $req->amount,
                     'priority' => $req->priority,
@@ -225,6 +226,15 @@ class CreateRequestController extends Controller
                 }
             }
 
+            // ------------------------- DRAFT: SKIP WORKFLOW ------------------------- //
+            if ($req->status === 'draft') {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Draft saved successfully',
+                    'data' => $req,
+                ], 201);
+            }
+
             // ------------------------- FETCH WORKFLOW ------------------------- //
             $workflow = WorkFlow::where('categori_id', $req->category)
                 ->where('request_type_id', $req->request_type)
@@ -358,7 +368,7 @@ class CreateRequestController extends Controller
     public function update(Request $request, $id)
     {
         // Find by request_id (string)
-        $req = ModelsRequest::where('request_id', $id)->first();
+        $req = ModelsRequest::where('id', $id)->first();
 
         if (! $req) {
             return response()->json([
@@ -405,6 +415,13 @@ class CreateRequestController extends Controller
             ]);
         }
 
+        if ($req->status === 'submitted') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Submitted requests cannot be edited',
+            ], 422);
+        }
+
         /**
          * ===============================
          * NORMAL UPDATE (DRAFT / SUBMIT)
@@ -416,6 +433,7 @@ class CreateRequestController extends Controller
             'request_type' => 'nullable|integer',
             'category' => 'nullable|integer',
             'department' => 'nullable|integer',
+            // 'budget_code' => 'required|exists:budget_codes,id',
             'amount' => 'nullable|string',
             'description' => 'nullable|string',
             'supplier_id' => 'nullable|integer',
@@ -581,7 +599,9 @@ class CreateRequestController extends Controller
                     'rejected' => 'Rejected',
                     default => $finalStatus['pending_by'],
                 };
+
                 return [
+                    'id' => $req->id,
                     'request_id' => $req->request_id,
                     'amount' => $req->amount,
                     'priority' => $req->priority,
@@ -634,6 +654,7 @@ class CreateRequestController extends Controller
                     }),
                 ];
             });
+
             return response()->json([
                 'status' => 'success',
                 'counts' => $counts,

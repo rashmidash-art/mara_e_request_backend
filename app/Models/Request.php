@@ -116,6 +116,14 @@ class Request extends Model
 
     public function getFinalStatus()
     {
+
+        if ($this->status === 'draft') {
+            return [
+                'final_status' => 'Draft',
+                'pending_by' => 'Request Submission',
+            ];
+        }
+
         $steps = $this->workflowUsers()->get();
 
         if ($this->status === 'withdraw') {
@@ -136,6 +144,8 @@ class Request extends Model
                 'pending_by' => 'withdraw',
             ];
         }
+
+
         //  If any rejected
         if ($steps->contains('status', 'rejected')) {
             return [
