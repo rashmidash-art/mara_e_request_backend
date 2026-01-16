@@ -433,7 +433,7 @@ class CreateRequestController extends Controller
             'request_type' => 'nullable|integer',
             'category' => 'nullable|integer',
             'department' => 'nullable|integer',
-            // 'budget_code' => 'required|exists:budget_codes,id',
+            'budget_code' => 'nullable|integer',
             'amount' => 'nullable|string',
             'description' => 'nullable|string',
             'supplier_id' => 'nullable|integer',
@@ -446,6 +446,7 @@ class CreateRequestController extends Controller
         ]);
 
         $req->update($validated);
+        Log::info('UPDATE PAYLOAD', $request->all());
 
         return response()->json([
             'status' => 'success',
