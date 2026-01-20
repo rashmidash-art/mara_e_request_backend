@@ -166,6 +166,7 @@ class UserController extends Controller
             $request->validate([
                 'name' => 'sometimes|required|string|max:255',
                 'designation' => 'sometimes|required|string|max:255',
+                'current_password' => 'required_with:password',
                 'password' => 'sometimes|required|string|min:6',
                 'email' => [
                     'sometimes',
@@ -231,10 +232,20 @@ class UserController extends Controller
                 'status',
             ]);
 
-            if ($request->has('password')) {
+            // if ($request->has('password')) {
+            //     $data['password'] = Hash::make($request->password);
+            // }
+
+            if ($request->filled('password')) {
+
+                if (! Hash::check($request->current_password, $user->password)) {
+                    return response()->json([
+                        'message' => 'Current password is incorrect',
+                    ], 422);
+                }
+
                 $data['password'] = Hash::make($request->password);
             }
-
             if ($request->hasFile('signature')) {
                 if ($user->signature) {
                     Storage::disk('public')->delete($user->signature);
