@@ -8,6 +8,7 @@ use App\Models\Entiti;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -166,7 +167,7 @@ class UserController extends Controller
             $request->validate([
                 'name' => 'sometimes|required|string|max:255',
                 'designation' => 'sometimes|required|string|max:255',
-                'current_password' => 'required_with:password',
+                // 'current_password' => 'required_with:password',
                 'password' => 'sometimes|required|string|min:6',
                 'email' => [
                     'sometimes',
@@ -238,14 +239,29 @@ class UserController extends Controller
 
             if ($request->filled('password')) {
 
-                if (! Hash::check($request->current_password, $user->password)) {
-                    return response()->json([
-                        'message' => 'Current password is incorrect',
-                    ], 422);
+                if (Auth::check() && Auth::id() === $user->id) {
+
+                    if (! $request->filled('current_password')) {
+                        return response()->json([
+                            'status' => 'error',
+                            'message' => 'Current password is required',
+                        ], 422);
+                    }
+
+                    if (! Hash::check($request->current_password, $user->password)) {
+                        return response()->json([
+                            'status' => 'error',
+                            'message' => 'Failed to update password',
+                            'errors' => [
+                                'current_password' => ['Current password is incorrect'],
+                            ],
+                        ], 422);
+                    }
                 }
 
                 $data['password'] = Hash::make($request->password);
             }
+
             if ($request->hasFile('signature')) {
                 if ($user->signature) {
                     Storage::disk('public')->delete($user->signature);
