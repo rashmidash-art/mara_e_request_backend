@@ -7,7 +7,6 @@ use App\Models\Request as ModelsRequest;
 use App\Models\RequestWorkflowDetails;
 use App\Models\User;
 use App\Models\WorkflowRoleAssign;
-use App\Models\WorkflowStep;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -53,7 +52,6 @@ class RequestWorkflowDetailsController extends Controller
         //
     }
 
-
     public function takeAction(Request $request, $request_id)
     {
         $validated = $request->validate([
@@ -69,10 +67,10 @@ class RequestWorkflowDetailsController extends Controller
             ->where('status', 'pending')
             ->first();
 
-        if (!$current) {
+        if (! $current) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'No pending workflow found for you'
+                'message' => 'No pending workflow found for you',
             ], 403);
         }
 
@@ -98,9 +96,12 @@ class RequestWorkflowDetailsController extends Controller
                 ]);
             }
 
+            //  ADD THIS LINE
+            $this->syncRequestStatus($request_id);
+
             return response()->json([
                 'status' => 'success',
-                'message' => 'Request approved successfully'
+                'message' => 'Request approved successfully',
             ]);
         }
 
@@ -114,9 +115,20 @@ class RequestWorkflowDetailsController extends Controller
                 'action_taken_by' => $user->id,
             ]);
 
+            // Mark ALL remaining pending steps as rejected
+            RequestWorkflowDetails::where('request_id', $request_id)
+                ->where('status', 'pending')
+                ->update([
+                    'status' => 'rejected',
+                ]);
+
+            //  Sync request master
+            ModelsRequest::where('request_id', $request_id)
+                ->update(['status' => 'rejected']);
+
             return response()->json([
                 'status' => 'success',
-                'message' => 'Request rejected successfully'
+                'message' => 'Request rejected successfully',
             ]);
         }
 
@@ -143,14 +155,10 @@ class RequestWorkflowDetailsController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Request sent back successfully'
+                'message' => 'Request sent back successfully',
             ]);
         }
     }
-
-
-
-
 
     private function getEligibleUsers(WorkflowRoleAssign $assign)
     {
@@ -164,5 +172,47 @@ class RequestWorkflowDetailsController extends Controller
         }
 
         return User::where('role_id', $assign->role_id)->get();
+    }
+
+    private function syncRequestStatus(string $requestId)
+    {
+        $req = ModelsRequest::where('request_id', $requestId)->first();
+
+        if (! $req) {
+            return;
+        }
+
+        $steps = RequestWorkflowDetails::where('request_id', $requestId)->get();
+
+        // If ANY rejected → rejected
+        if ($steps->contains('status', 'rejected')) {
+            $req->update(['status' => 'rejected']);
+
+            return;
+        }
+
+        // If all pending → submitted
+        if ($steps->every(fn ($s) => $s->status === 'pending')) {
+            $req->update(['status' => 'submitted']);
+
+            return;
+        }
+
+        // If some approved & some pending → in approval
+        if (
+            $steps->contains('status', 'approved') &&
+            $steps->contains('status', 'pending')
+        ) {
+            $req->update(['status' => 'in_approval']);
+
+            return;
+        }
+
+        // If all approved → approved
+        if ($steps->every(fn ($s) => $s->status === 'approved')) {
+            $req->update(['status' => 'approved']);
+
+            return;
+        }
     }
 }

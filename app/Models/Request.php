@@ -116,7 +116,7 @@ class Request extends Model
 
     public function getFinalStatus()
     {
-
+        // Draft always stays draft
         if ($this->status === 'draft') {
             return [
                 'final_status' => 'Draft',
@@ -124,29 +124,17 @@ class Request extends Model
             ];
         }
 
-        $steps = $this->workflowUsers()->get();
-
+        // Withdraw overrides everything
         if ($this->status === 'withdraw') {
             return [
-                'final_status' => 'withdraw',
+                'final_status' => 'Withdrawn',
                 'pending_by' => null,
             ];
         }
-        if ($steps->contains('status', 'withdraw')) {
-            return [
-                'final_status' => 'withdraw',
-                'pending_by' => 'withdraw',
-            ];
-        }
-        if ($steps->contains('status', 'withdraw')) {
-            return [
-                'final_status' => 'withdraw',
-                'pending_by' => 'withdraw',
-            ];
-        }
 
+        $steps = $this->workflowUsers()->get();
 
-        //  If any rejected
+        // Rejected if ANY step rejected
         if ($steps->contains('status', 'rejected')) {
             return [
                 'final_status' => 'Rejected',
@@ -154,7 +142,26 @@ class Request extends Model
             ];
         }
 
-        //  If all approved
+        // No approver has acted yet
+        if ($steps->every(fn ($s) => $s->status === 'pending')) {
+            return [
+                'final_status' => 'Submitted',
+                'pending_by' => $steps->first()?->role?->name,
+            ];
+        }
+
+        // Some approved, some pending
+        if (
+            $steps->contains('status', 'approved') &&
+            $steps->contains('status', 'pending')
+        ) {
+            return [
+                'final_status' => 'In Approval',
+                'pending_by' => $steps->firstWhere('status', 'pending')?->role?->name,
+            ];
+        }
+
+        // All approved
         if ($steps->isNotEmpty() && $steps->every(fn ($s) => $s->status === 'approved')) {
             return [
                 'final_status' => 'Approved',
@@ -162,19 +169,72 @@ class Request extends Model
             ];
         }
 
-        //  If any pending
-        $pending = $steps->firstWhere('status', 'pending');
-        if ($pending) {
-            return [
-                'final_status' => 'Pending',
-                'pending_by' => $pending->role?->name ?? 'In Progress',
-            ];
-        }
-
-        // Fallback
         return [
             'final_status' => ucfirst($this->status),
             'pending_by' => null,
         ];
     }
+
+    // public function getFinalStatus()
+    // {
+
+    //     if ($this->status === 'draft') {
+    //         return [
+    //             'final_status' => 'Draft',
+    //             'pending_by' => 'Request Submission',
+    //         ];
+    //     }
+
+    //     $steps = $this->workflowUsers()->get();
+
+    //     if ($this->status === 'withdraw') {
+    //         return [
+    //             'final_status' => 'withdraw',
+    //             'pending_by' => null,
+    //         ];
+    //     }
+    //     if ($steps->contains('status', 'withdraw')) {
+    //         return [
+    //             'final_status' => 'withdraw',
+    //             'pending_by' => 'withdraw',
+    //         ];
+    //     }
+    //     if ($steps->contains('status', 'withdraw')) {
+    //         return [
+    //             'final_status' => 'withdraw',
+    //             'pending_by' => 'withdraw',
+    //         ];
+    //     }
+
+    //     //  If any rejected
+    //     if ($steps->contains('status', 'rejected')) {
+    //         return [
+    //             'final_status' => 'Rejected',
+    //             'pending_by' => 'Returned',
+    //         ];
+    //     }
+
+    //     //  If all approved
+    //     if ($steps->isNotEmpty() && $steps->every(fn ($s) => $s->status === 'approved')) {
+    //         return [
+    //             'final_status' => 'Approved',
+    //             'pending_by' => 'Completed',
+    //         ];
+    //     }
+
+    //     //  If any pending
+    //     $pending = $steps->firstWhere('status', 'pending');
+    //     if ($pending) {
+    //         return [
+    //             'final_status' => 'Pending',
+    //             'pending_by' => $pending->role?->name ?? 'In Progress',
+    //         ];
+    //     }
+
+    //     // Fallback
+    //     return [
+    //         'final_status' => ucfirst($this->status),
+    //         'pending_by' => null,
+    //     ];
+    // }
 }

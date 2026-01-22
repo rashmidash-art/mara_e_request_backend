@@ -511,6 +511,7 @@ class CreateRequestController extends Controller
             $userId = $auth->id;
             $isEntityLogin = $auth instanceof Entiti;
             $isSuperAdmin = (! $isEntityLogin && isset($auth->user_type) && $auth->user_type == 0);
+
             $baseQuery = ModelsRequest::with([
                 'categoryData:id,name',
                 'entityData:id,name',
@@ -524,6 +525,7 @@ class CreateRequestController extends Controller
                         ->orderBy('id', 'asc');
                 },
             ]);
+
             if ($isSuperAdmin) {
                 $requests = $baseQuery->orderByDesc('id')->get();
             } elseif ($isEntityLogin) {
@@ -543,6 +545,7 @@ class CreateRequestController extends Controller
                     ->orderByDesc('id')
                     ->get();
             }
+
             $countQuery = ModelsRequest::query();
 
             if ($isEntityLogin) {
@@ -567,31 +570,54 @@ class CreateRequestController extends Controller
                     $q->where('status', 'pending');
                 })->count(),
             ];
+
             $userTotalAmount = ModelsRequest::where('user', $userId)->sum('amount');
             $entityTotalAmount = ModelsRequest::where('entiti', $auth->id)->sum('amount');
             $adminTotalAmount = ModelsRequest::sum('amount');
+
             $data = $requests->map(function ($req) {
 
                 $workflowHistory = $req->workflowHistory;
+
+                // Group by workflow step ID to show step only once
+                $groupedSteps = $workflowHistory
+                    ->groupBy('workflow_step_id')
+                    ->map(function ($steps) {
+                        $first = $steps->first();
+
+                        // Get the last user who approved/rejected
+                        $lastAction = $steps
+                            ->whereIn('status', ['approved', 'rejected'])
+                            ->sortByDesc('updated_at')
+                            ->first();
+
+                        return [
+                            'step' => $first->workflowStep?->name ?? 'N/A', // Step name
+                            'stage' => $first->workflowStep?->name ?? 'N/A',
+                            'role' => $steps
+                                ->pluck('role.name')
+                                ->filter()
+                                ->unique()
+                                ->values()
+                                ->join(', '),
+                            'assigned_user' => $lastAction?->assignedUser?->name ?? '—',
+                            'status' => $lastAction?->status ?? 'pending',
+                            'date' => $lastAction?->updated_at?->format('Y-m-d') ?? '-',
+                        ];
+                    })
+                    ->values();
+
+                // Final approval timeline including submission as first stage
                 $approvalTimeline = collect([
                     [
                         'stage' => 'Submitted',
-                        'role' => 'You',
+                        'role' => 'Requester',
                         'assigned_user' => $req->userData?->name ?? 'You',
                         'status' => 'submitted',
                         'date' => $req->created_at?->format('Y-m-d'),
                     ],
-                ])->concat(
-                    $workflowHistory->map(function ($step) {
-                        return [
-                            'stage' => $step->workflowStep?->name ?? 'N/A',
-                            'role' => $step->role?->name ?? 'N/A',
-                            'assigned_user' => $step->assignedUser?->name ?? '—',
-                            'status' => $step->status,
-                            'date' => $step->updated_at?->format('Y-m-d') ?? '-',
-                        ];
-                    })
-                );
+                ])->concat($groupedSteps);
+
                 $finalStatus = $req->getFinalStatus();
 
                 $currentStage = match ($finalStatus['final_status']) {
@@ -608,49 +634,40 @@ class CreateRequestController extends Controller
                     'priority' => $req->priority,
                     'description' => $req->description,
                     'status' => $req->status,
-
                     'final_status' => $finalStatus['final_status'],
-                    'pending_by' => $finalStatus['pending_by'], // backward compatible
-                    'current_stage' => $currentStage,               // NEW (use this in UI)
-
+                    'pending_by' => $finalStatus['pending_by'],
+                    'current_stage' => $currentStage,
                     'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
-
                     'category' => [
                         'id' => $req->category,
                         'name' => $req->categoryData?->name,
                     ],
-
                     'entity' => [
                         'id' => $req->entiti,
                         'name' => $req->entityData?->name,
                     ],
-
                     'requested_by' => [
                         'id' => $req->user,
                         'name' => $req->userData?->name,
                     ],
-
                     'request_type' => [
                         'id' => $req->request_type,
                         'name' => $req->requestTypeData?->name,
                     ],
-
                     'department' => [
                         'id' => $req->department,
                         'name' => $req->departmentData?->name,
                     ],
-
                     'supplier' => [
                         'id' => $req->supplier_id,
                         'name' => $req->supplierData?->name,
                     ],
-
                     'workflow_history' => $approvalTimeline->values(),
-
                     'documents' => $req->documents->map(function ($doc) {
                         return [
                             'document_id' => $doc->document_id,
                             'document' => last(explode('_', $doc->document)),
+                            'url' => url('storage/requestdocuments/'.$doc->document),
                         ];
                     }),
                 ];
@@ -668,7 +685,6 @@ class CreateRequestController extends Controller
             ]);
 
         } catch (\Exception $e) {
-
             Log::error('Request index failed: '.$e->getMessage());
 
             return response()->json([
@@ -678,4 +694,180 @@ class CreateRequestController extends Controller
             ], 500);
         }
     }
+
+    // public function requestDetailsAll(Request $request)
+    // {
+    //     try {
+    //         $auth = Auth::user();
+    //         $userId = $auth->id;
+    //         $isEntityLogin = $auth instanceof Entiti;
+    //         $isSuperAdmin = (! $isEntityLogin && isset($auth->user_type) && $auth->user_type == 0);
+    //         $baseQuery = ModelsRequest::with([
+    //             'categoryData:id,name',
+    //             'entityData:id,name',
+    //             'userData:id,name',
+    //             'requestTypeData:id,name',
+    //             'departmentData:id,name',
+    //             'supplierData:id,name',
+    //             'documents:id,request_id,document_id,document',
+    //             'workflowHistory' => function ($q) {
+    //                 $q->with(['role', 'assignedUser', 'workflowStep'])
+    //                     ->orderBy('id', 'asc');
+    //             },
+    //         ]);
+    //         if ($isSuperAdmin) {
+    //             $requests = $baseQuery->orderByDesc('id')->get();
+    //         } elseif ($isEntityLogin) {
+    //             $requests = $baseQuery
+    //                 ->where('entiti', $auth->id)
+    //                 ->orderByDesc('id')
+    //                 ->get();
+    //         } else {
+    //             $requests = $baseQuery
+    //                 ->where(function ($q) use ($userId) {
+    //                     $q->where('user', $userId)
+    //                         ->orWhereHas('currentWorkflowRole', function ($w) use ($userId) {
+    //                             $w->where('assigned_user_id', $userId)
+    //                                 ->where('status', 'pending');
+    //                         });
+    //                 })
+    //                 ->orderByDesc('id')
+    //                 ->get();
+    //         }
+    //         $countQuery = ModelsRequest::query();
+
+    //         if ($isEntityLogin) {
+    //             $countQuery->where('entiti', $auth->id);
+    //         } elseif (! $isSuperAdmin) {
+    //             $countQuery->where(function ($q) use ($userId) {
+    //                 $q->where('user', $userId)
+    //                     ->orWhereHas('currentWorkflowRole', function ($w) use ($userId) {
+    //                         $w->where('assigned_user_id', $userId)
+    //                             ->where('status', 'pending');
+    //                     });
+    //             });
+    //         }
+
+    //         $counts = [
+    //             'total' => $countQuery->count(),
+    //             'draft' => (clone $countQuery)->where('status', 'draft')->count(),
+    //             'submitted' => (clone $countQuery)->where('status', 'submitted')->count(),
+    //             'approved' => (clone $countQuery)->where('status', 'approved')->count(),
+    //             'rejected' => (clone $countQuery)->where('status', 'rejected')->count(),
+    //             'pending' => (clone $countQuery)->whereHas('workflowHistory', function ($q) {
+    //                 $q->where('status', 'pending');
+    //             })->count(),
+    //         ];
+    //         $userTotalAmount = ModelsRequest::where('user', $userId)->sum('amount');
+    //         $entityTotalAmount = ModelsRequest::where('entiti', $auth->id)->sum('amount');
+    //         $adminTotalAmount = ModelsRequest::sum('amount');
+    //         $data = $requests->map(function ($req) {
+
+    //             $workflowHistory = $req->workflowHistory;
+    //             $approvalTimeline = collect([
+    //                 [
+    //                     'step' => $step->workflowStep?->name ?? 'N/A',
+    //                     'stage' => 'Submitted',
+    //                     'role' => 'You',
+    //                     'assigned_user' => $req->userData?->name ?? 'You',
+    //                     'status' => 'submitted',
+    //                     'date' => $req->created_at?->format('Y-m-d'),
+    //                 ],
+    //             ])->concat(
+    //                 $workflowHistory->map(function ($step) {
+    //                     return [
+    //                         'stage' => $step->workflowStep?->name ?? 'N/A',
+    //                         'role' => $step->role?->name ?? 'N/A',
+    //                         'assigned_user' => $step->assignedUser?->name ?? '—',
+    //                         'status' => $step->status,
+    //                         'date' => $step->updated_at?->format('Y-m-d') ?? '-',
+    //                     ];
+    //                 })
+    //             );
+    //             $finalStatus = $req->getFinalStatus();
+
+    //             $currentStage = match ($finalStatus['final_status']) {
+    //                 'withdraw' => 'Withdrawn',
+    //                 'approved' => 'Completed',
+    //                 'rejected' => 'Rejected',
+    //                 default => $finalStatus['pending_by'],
+    //             };
+
+    //             return [
+    //                 'id' => $req->id,
+    //                 'request_id' => $req->request_id,
+    //                 'amount' => $req->amount,
+    //                 'priority' => $req->priority,
+    //                 'description' => $req->description,
+    //                 'status' => $req->status,
+
+    //                 'final_status' => $finalStatus['final_status'],
+    //                 'pending_by' => $finalStatus['pending_by'], // backward compatible
+    //                 'current_stage' => $currentStage,               // NEW (use this in UI)
+
+    //                 'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
+
+    //                 'category' => [
+    //                     'id' => $req->category,
+    //                     'name' => $req->categoryData?->name,
+    //                 ],
+
+    //                 'entity' => [
+    //                     'id' => $req->entiti,
+    //                     'name' => $req->entityData?->name,
+    //                 ],
+
+    //                 'requested_by' => [
+    //                     'id' => $req->user,
+    //                     'name' => $req->userData?->name,
+    //                 ],
+
+    //                 'request_type' => [
+    //                     'id' => $req->request_type,
+    //                     'name' => $req->requestTypeData?->name,
+    //                 ],
+
+    //                 'department' => [
+    //                     'id' => $req->department,
+    //                     'name' => $req->departmentData?->name,
+    //                 ],
+
+    //                 'supplier' => [
+    //                     'id' => $req->supplier_id,
+    //                     'name' => $req->supplierData?->name,
+    //                 ],
+
+    //                 'workflow_history' => $approvalTimeline->values(),
+
+    //                 'documents' => $req->documents->map(function ($doc) {
+    //                     return [
+    //                         'document_id' => $doc->document_id,
+    //                         'document' => last(explode('_', $doc->document)),
+    //                     ];
+    //                 }),
+    //             ];
+    //         });
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'counts' => $counts,
+    //             'total_amount' => [
+    //                 'user_total_amount' => $userTotalAmount,
+    //                 'entity_total_amount' => $entityTotalAmount,
+    //                 'admin_total_amount' => $adminTotalAmount,
+    //             ],
+    //             'data' => $data,
+    //         ]);
+
+    //     } catch (\Exception $e) {
+
+    //         Log::error('Request index failed: '.$e->getMessage());
+
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Failed to fetch requests',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
 }
