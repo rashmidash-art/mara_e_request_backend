@@ -114,9 +114,14 @@ class Request extends Model
             ->orderBy('id', 'asc');  // Ensures full timeline step-by-step
     }
 
+    public function requestDetailsDocuments()
+    {
+        return $this->hasOne(RequestDetailsDocuments::class, 'request_id', 'request_id');
+    }
+
     public function getFinalStatus()
     {
-        // Draft always stays draft
+        // Step 1-5: Workflow statuses
         if ($this->status === 'draft') {
             return [
                 'final_status' => 'Draft',
@@ -124,7 +129,6 @@ class Request extends Model
             ];
         }
 
-        // Withdraw overrides everything
         if ($this->status === 'withdraw') {
             return [
                 'final_status' => 'Withdrawn',
@@ -134,7 +138,6 @@ class Request extends Model
 
         $steps = $this->workflowUsers()->get();
 
-        // Rejected if ANY step rejected
         if ($steps->contains('status', 'rejected')) {
             return [
                 'final_status' => 'Rejected',
@@ -142,7 +145,6 @@ class Request extends Model
             ];
         }
 
-        // No approver has acted yet
         if ($steps->every(fn ($s) => $s->status === 'pending')) {
             return [
                 'final_status' => 'Submitted',
@@ -150,7 +152,6 @@ class Request extends Model
             ];
         }
 
-        // Some approved, some pending
         if (
             $steps->contains('status', 'approved') &&
             $steps->contains('status', 'pending')
@@ -161,14 +162,46 @@ class Request extends Model
             ];
         }
 
-        // All approved
         if ($steps->isNotEmpty() && $steps->every(fn ($s) => $s->status === 'approved')) {
+            // Workflow approved — now check document status
+            $doc = $this->requestDetailsDocuments; // Make sure relation is defined
+
+            if ($doc) {
+                if ($doc->is_payment_completed == 1) {
+                    return [
+                        'final_status' => 'Payment Completed',
+                        'pending_by' => 'Completed',
+                    ];
+                }
+
+                if ($doc->is_delivery_completed == 1) {
+                    return [
+                        'final_status' => 'Delivery Completed',
+                        'pending_by' => 'Upload Payment',
+                    ];
+                }
+
+                if ($doc->is_po_created == 1) {
+                    return [
+                        'final_status' => 'PO Created',
+                        'pending_by' => 'Upload Delivery',
+                    ];
+                }
+
+                return [
+                    'final_status' => 'Approved',
+                    'pending_by' => 'Upload PO',
+                ];
+            }
+
+            // No documents yet
             return [
                 'final_status' => 'Approved',
-                'pending_by' => 'Completed',
+                'pending_by' => 'Upload PO',
             ];
         }
 
+        // fallback
         return [
             'final_status' => ucfirst($this->status),
             'pending_by' => null,

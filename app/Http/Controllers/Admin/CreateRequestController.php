@@ -7,6 +7,7 @@ use App\Models\Department;
 use App\Models\Document;
 use App\Models\Entiti;
 use App\Models\Request as ModelsRequest;
+use App\Models\RequestDetailsDocuments;
 use App\Models\RequestDocument;
 use App\Models\RequestWorkflowDetails;
 use App\Models\User;
@@ -29,6 +30,7 @@ class CreateRequestController extends Controller
             $auth = Auth::user();
             $isEntityLogin = $auth instanceof Entiti;
             $isSuperAdmin = ! $isEntityLogin && isset($auth->user_type) && $auth->user_type == 0;
+
             $query = ModelsRequest::with([
                 'categoryData:id,name',
                 'entityData:id,name',
@@ -37,7 +39,9 @@ class CreateRequestController extends Controller
                 'departmentData:id,name',
                 'supplierData:id,name',
                 'budgetCode:id,budget_code',
-                'documents:id,request_id,document_id,document', // Eager load the documents
+                'documents:id,request_id,document_id,document',
+                'requestDetailsDocuments:id,request_id,request_details_id,is_po_created,is_delivery_completed,is_payment_completed',
+
                 'currentWorkflowRole' => function ($q) {
                     $q->select(
                         'id',
@@ -52,6 +56,7 @@ class CreateRequestController extends Controller
                 'currentWorkflowRole.assignedUser:id,name',
                 'currentWorkflowRole.workflowStep:id,name',
             ])->orderByDesc('id');
+
             if ($isSuperAdmin) {
                 $requests = $query->get();
             } elseif ($isEntityLogin) {
@@ -69,13 +74,39 @@ class CreateRequestController extends Controller
 
                 $workflow = $req->currentWorkflowRole;
 
+                // ------------------------ FINAL STATUS LOGIC ------------------------
+                $finalStatusData = $req->getFinalStatus(); // ['final_status', 'pending_by']
+
+                $doc = $req->requestDetailsDocuments->first(); // Document-based flags
+                $documentStatus = null;
+                if ($doc) {
+                    if ($doc->is_payment_completed == 1) {
+                        $documentStatus = 'Payment Completed';
+                    } elseif ($doc->is_delivery_completed == 1) {
+                        $documentStatus = 'Delivery Completed';
+                    } elseif ($doc->is_po_created == 1) {
+                        $documentStatus = 'PO Created';
+                    } elseif ($req->status == 'submitted') {
+                        $documentStatus = 'Approved';
+                    }
+                }
+
+                // Decide which status to show
+                $requestStatus = in_array($finalStatusData['final_status'], ['Draft', 'Withdrawn', 'Rejected', 'In Approval', 'Submitted'])
+                    ? $finalStatusData['final_status']
+                    : $documentStatus ?? $finalStatusData['final_status'];
+
+                $requestPendingBy = $finalStatusData['pending_by'] ?? null;
+
+                // ------------------------ RESPONSE MAPPING ------------------------
                 return [
                     'id' => $req->id,
                     'request_id' => $req->request_id,
                     'amount' => $req->amount,
                     'priority' => $req->priority,
                     'description' => $req->description,
-                    'status' => $req->status,
+                    'status' => $requestStatus,
+                    'pending_by' => $requestPendingBy,
                     'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
 
                     'user' => [
@@ -115,16 +146,7 @@ class CreateRequestController extends Controller
                         'status' => $workflow?->status,
                     ],
 
-                    // Include documents with only document_id and document name
-                    // 'documents' => $req->documents->map(function ($doc) {
-                    //     return [
-                    //         'document_id' => $doc->document_id,
-                    //         'document'    => $doc->document
-                    //     ];
-                    // }),
-
                     'documents' => $req->documents->map(function ($doc) {
-                        // Extract the actual filename after the last underscore
                         $filename = last(explode('_', $doc->document));
 
                         return [
@@ -201,6 +223,28 @@ class CreateRequestController extends Controller
                 'behalf_of_department' => $request->behalf_of_department,
                 'business_justification' => $request->business_justification,
                 'status' => $request->status ?? 'draft',
+            ]);
+
+            RequestDetailsDocuments::create([
+                'request_details_id' => $req->id,
+                'request_id' => $req->request_id,
+
+                'is_po_created' => 0,
+                'po_number' => null,
+                'po_date' => null,
+                'po_documents' => null,
+
+                'is_delivery_completed' => 0,
+                'delivery_completed_number' => null,
+                'delivery_completed_date' => null,
+                'delivery_completed_documents' => null,
+
+                'is_payment_completed' => 0,
+                'payment_completed_number' => null,
+                'payment_completed_date' => null,
+                'payment_completed_documents' => null,
+
+                'status' => 'pending',
             ]);
 
             // ------------------------- ATTACHMENTS ------------------------- //
@@ -367,8 +411,13 @@ class CreateRequestController extends Controller
     /** Update request */
     public function update(Request $request, $id)
     {
-        // Find by request_id (string)
-        $req = ModelsRequest::where('id', $id)->first();
+
+        Log::info('FILES', $request->allFiles());
+        Log::info('HAS PO FILE', [
+            'has_po' => $request->hasFile('po_documents'),
+        ]);
+
+        $req = ModelsRequest::find($id);
 
         if (! $req) {
             return response()->json([
@@ -379,12 +428,10 @@ class CreateRequestController extends Controller
 
         /**
          * ===============================
-         * WITHDRAW REQUEST (SPECIAL FLOW)
+         * WITHDRAW REQUEST
          * ===============================
          */
         if ($request->status === 'withdraw') {
-
-            // Allow withdraw ONLY when submitted
             if ($req->status !== 'submitted') {
                 return response()->json([
                     'status' => 'error',
@@ -393,14 +440,11 @@ class CreateRequestController extends Controller
             }
 
             DB::transaction(function () use ($req) {
-
-                //  Update request master
                 $req->update([
                     'status' => 'withdraw',
                     'updated_at' => now(),
                 ]);
 
-                //  Update ONLY pending workflow steps
                 RequestWorkflowDetails::where('request_id', $req->request_id)
                     ->where('status', 'pending')
                     ->update([
@@ -415,45 +459,194 @@ class CreateRequestController extends Controller
             ]);
         }
 
-        if ($req->status === 'submitted') {
+        /**
+         * ===============================
+         * DOCUMENT UPLOAD
+         * ===============================
+         */
+        if (
+            $request->hasFile('po_documents') ||
+            $request->hasFile('delivery_completed_documents') ||
+            $request->hasFile('payment_completed_documents')
+        ) {
+            DB::transaction(function () use ($request, $req) {
+
+                $doc = RequestDetailsDocuments::updateOrCreate(
+                    ['request_id' => $req->request_id],
+                    ['request_details_id' => $req->id]
+                );
+
+                /* ---------- PO ---------- */
+                if ($request->hasFile('po_documents')) {
+                    $file = $request->file('po_documents');
+                    $name = 'po_'.$req->request_id.'_'.$file->getClientOriginalName();
+                    $file->storeAs('request_documents', $name, 'public');
+
+                    $doc->update([
+                        'is_po_created' => 1,
+                        'po_number' => $request->po_number,
+                        'po_date' => $request->po_date,
+                        'po_documents' => $name,
+                    ]);
+                }
+
+                /* ---------- DELIVERY ---------- */
+                if ($request->hasFile('delivery_completed_documents')) {
+                    $file = $request->file('delivery_completed_documents');
+                    $name = 'delivery_'.$req->request_id.'_'.$file->getClientOriginalName();
+                    $file->storeAs('request_documents', $name, 'public');
+
+                    $doc->update([
+                        'is_delivery_completed' => 1,
+                        'delivery_completed_number' => $request->delivery_completed_number,
+                        'delivery_completed_date' => $request->delivery_completed_date,
+                        'delivery_completed_documents' => $name,
+                    ]);
+                }
+
+                /* ---------- PAYMENT ---------- */
+                if ($request->hasFile('payment_completed_documents')) {
+                    $file = $request->file('payment_completed_documents');
+                    $name = 'payment_'.$req->request_id.'_'.$file->getClientOriginalName();
+                    $file->storeAs('request_documents', $name, 'public');
+
+                    $doc->update([
+                        'is_payment_completed' => 1,
+                        'payment_completed_number' => $request->payment_completed_number,
+                        'payment_completed_date' => $request->payment_completed_date,
+                        'payment_completed_documents' => $name,
+                    ]);
+
+                    Log::info('DOC MODEL', [
+                        'table' => $doc->getTable(),
+                        'id' => $doc->id,
+                        'connection' => $doc->getConnectionName(),
+                    ]);
+                }
+
+                $doc->status = strtolower($doc->getCurrentStatus());
+
+                Log::info('DB NAME', [
+                    DB::connection()->getDatabaseName(),
+                ]);
+                $doc->save();
+            });
+
             return response()->json([
-                'status' => 'error',
-                'message' => 'Submitted requests cannot be edited',
-            ], 422);
+                'status' => 'success',
+                'message' => 'Documents uploaded successfully',
+            ]);
         }
 
         /**
          * ===============================
-         * NORMAL UPDATE (DRAFT / SUBMIT)
+         * NORMAL UPDATE
          * ===============================
          */
         $validated = $request->validate([
-            'entiti' => 'nullable',
-            'user' => 'nullable|integer',
-            'request_type' => 'nullable|integer',
-            'category' => 'nullable|integer',
-            'department' => 'nullable|integer',
-            'budget_code' => 'nullable|integer',
             'amount' => 'nullable|string',
             'description' => 'nullable|string',
-            'supplier_id' => 'nullable|integer',
-            'expected_date' => 'nullable|string',
             'priority' => 'nullable|string',
-            'behalf_of' => 'nullable|integer|in:0,1',
-            'behalf_of_department' => 'nullable|integer',
-            'business_justification' => 'nullable|string',
             'status' => 'nullable|in:submitted,draft,deleted',
         ]);
 
         $req->update($validated);
-        Log::info('UPDATE PAYLOAD', $request->all());
 
         return response()->json([
             'status' => 'success',
             'message' => 'Request updated successfully',
-            'data' => $req,
         ]);
     }
+
+    // public function update(Request $request, $id)
+    // {
+    //     // Find by request_id (string)
+    //     $req = ModelsRequest::where('id', $id)->first();
+
+    //     if (! $req) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Request not found',
+    //         ], 404);
+    //     }
+
+    //     /**
+    //      * ===============================
+    //      * WITHDRAW REQUEST (SPECIAL FLOW)
+    //      * ===============================
+    //      */
+    //     if ($request->status === 'withdraw') {
+
+    //         // Allow withdraw ONLY when submitted
+    //         if ($req->status !== 'submitted') {
+    //             return response()->json([
+    //                 'status' => 'error',
+    //                 'message' => 'Only submitted requests can be withdrawn',
+    //             ], 422);
+    //         }
+
+    //         DB::transaction(function () use ($req) {
+
+    //             //  Update request master
+    //             $req->update([
+    //                 'status' => 'withdraw',
+    //                 'updated_at' => now(),
+    //             ]);
+
+    //             //  Update ONLY pending workflow steps
+    //             RequestWorkflowDetails::where('request_id', $req->request_id)
+    //                 ->where('status', 'pending')
+    //                 ->update([
+    //                     'status' => 'withdraw',
+    //                     'updated_at' => now(),
+    //                 ]);
+    //         });
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'Request withdrawn successfully',
+    //         ]);
+    //     }
+
+    //     if ($req->status === 'submitted') {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Submitted requests cannot be edited',
+    //         ], 422);
+    //     }
+
+    //     /**
+    //      * ===============================
+    //      * NORMAL UPDATE (DRAFT / SUBMIT)
+    //      * ===============================
+    //      */
+    //     $validated = $request->validate([
+    //         'entiti' => 'nullable',
+    //         'user' => 'nullable|integer',
+    //         'request_type' => 'nullable|integer',
+    //         'category' => 'nullable|integer',
+    //         'department' => 'nullable|integer',
+    //         'budget_code' => 'nullable|integer',
+    //         'amount' => 'nullable|string',
+    //         'description' => 'nullable|string',
+    //         'supplier_id' => 'nullable|integer',
+    //         'expected_date' => 'nullable|string',
+    //         'priority' => 'nullable|string',
+    //         'behalf_of' => 'nullable|integer|in:0,1',
+    //         'behalf_of_department' => 'nullable|integer',
+    //         'business_justification' => 'nullable|string',
+    //         'status' => 'nullable|in:submitted,draft,deleted',
+    //     ]);
+
+    //     $req->update($validated);
+    //     Log::info('UPDATE PAYLOAD', $request->all());
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'message' => 'Request updated successfully',
+    //         'data' => $req,
+    //     ]);
+    // }
 
     /** Delete request */
     public function destroy($id)
@@ -523,7 +716,11 @@ class CreateRequestController extends Controller
                 'workflowHistory' => function ($q) {
                     $q->with(['role', 'assignedUser', 'workflowStep'])
                         ->orderBy('id', 'asc');
+
                 },
+
+                'requestDetailsDocuments:id,request_id,is_po_created,is_delivery_completed,is_payment_completed,po_number,po_date,po_documents,delivery_completed_number,delivery_completed_date,delivery_completed_documents,payment_completed_number,payment_completed_date,payment_completed_documents',
+
             ]);
 
             if ($isSuperAdmin) {
@@ -670,6 +867,21 @@ class CreateRequestController extends Controller
                             'url' => url('storage/requestdocuments/'.$doc->document),
                         ];
                     }),
+
+                    'status_flags' => [
+                        'is_po_created' => $req->requestDetailsDocuments?->is_po_created ?? 0,
+                        'is_delivery_completed' => $req->requestDetailsDocuments?->is_delivery_completed ?? 0,
+                        'is_payment_completed' => $req->requestDetailsDocuments?->is_payment_completed ?? 0,
+                        'po_number' => $req->requestDetailsDocuments?->po_number,
+                        'po_date' => $req->requestDetailsDocuments?->po_date,
+                        'po_documents' => $req->requestDetailsDocuments?->po_documents,
+                        'delivery_completed_number' => $req->requestDetailsDocuments?->delivery_completed_number,
+                        'delivery_completed_date' => $req->requestDetailsDocuments?->delivery_completed_date,
+                        'delivery_completed_documents' => $req->requestDetailsDocuments?->delivery_completed_documents,
+                        'payment_completed_number' => $req->requestDetailsDocuments?->payment_completed_number,
+                        'payment_completed_date' => $req->requestDetailsDocuments?->payment_completed_date,
+                        'payment_completed_documents' => $req->requestDetailsDocuments?->payment_completed_documents,
+                    ],
                 ];
             });
 
