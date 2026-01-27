@@ -174,45 +174,65 @@ class RequestWorkflowDetailsController extends Controller
         return User::where('role_id', $assign->role_id)->get();
     }
 
-    private function syncRequestStatus(string $requestId)
-    {
-        $req = ModelsRequest::where('request_id', $requestId)->first();
+    // private function syncRequestStatus(string $requestId)
+    // {
+    //     $req = ModelsRequest::where('request_id', $requestId)->first();
 
-        if (! $req) {
-            return;
-        }
+    //     if (! $req) {
+    //         return;
+    //     }
 
-        $steps = RequestWorkflowDetails::where('request_id', $requestId)->get();
+    //     $steps = RequestWorkflowDetails::where('request_id', $requestId)->get();
 
-        // If ANY rejected → rejected
-        if ($steps->contains('status', 'rejected')) {
-            $req->update(['status' => 'rejected']);
+    //     // If ANY rejected → rejected
+    //     if ($steps->contains('status', 'rejected')) {
+    //         $req->update(['status' => 'rejected']);
 
-            return;
-        }
+    //         return;
+    //     }
 
-        // If all pending → submitted
-        if ($steps->every(fn ($s) => $s->status === 'pending')) {
-            $req->update(['status' => 'submitted']);
+    //     // If all pending → submitted
+    //     if ($steps->every(fn ($s) => $s->status === 'pending')) {
+    //         $req->update(['status' => 'submitted']);
 
-            return;
-        }
+    //         return;
+        // }
 
         // If some approved & some pending → in approval
-        if (
-            $steps->contains('status', 'approved') &&
-            $steps->contains('status', 'pending')
-        ) {
-            $req->update(['status' => 'in_approval']);
+        // if (
+        //     $steps->contains('status', 'approved') &&
+        //     $steps->contains('status', 'pending')
+        // ) {
+        //     $req->update(['status' => 'in_approval']);
 
-            return;
-        }
+        //     return;
+        // }
 
         // If all approved → approved
-        if ($steps->every(fn ($s) => $s->status === 'approved')) {
-            $req->update(['status' => 'approved']);
+        // if ($steps->every(fn ($s) => $s->status === 'approved')) {
+        //     $req->update(['status' => 'approved']);
 
-            return;
-        }
+        //     return;
+        // }
+    // }
+
+    private function syncRequestStatus(string $requestId)
+{
+    $req = ModelsRequest::where('request_id', $requestId)->first();
+    if (! $req) {
+        return;
     }
+
+    $steps = RequestWorkflowDetails::where('request_id', $requestId)->get();
+
+    // If any rejected → keep submitted (UI will show Rejected)
+    if ($steps->contains('status', 'rejected')) {
+        $req->update(['status' => 'submitted']);
+        return;
+    }
+
+    // Once workflow starts, it is always submitted
+    $req->update(['status' => 'submitted']);
+}
+
 }

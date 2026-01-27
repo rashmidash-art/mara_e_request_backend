@@ -503,7 +503,7 @@ class CreateRequestController extends Controller
                     ]);
                 }
 
-                $doc->status = strtolower($doc->getCurrentStatus());
+                // $doc->status = strtolower($doc->getCurrentStatus());
 
                 Log::info('DB NAME', [
                     DB::connection()->getDatabaseName(),
