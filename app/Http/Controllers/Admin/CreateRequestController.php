@@ -711,16 +711,22 @@ class CreateRequestController extends Controller
                     ->get();
             } else {
                 $requests = $baseQuery
-                    ->where(function ($q) use ($userId) {
-                        $q->where('user', $userId)
-                            ->orWhereHas('currentWorkflowRole', function ($w) use ($userId) {
-                                $w->where('assigned_user_id', $userId)
-                                    ->where('status', 'pending');
-                            });
-                    })
+                    ->where('user', $userId) // ONLY my created requests
                     ->orderByDesc('id')
                     ->get();
             }
+            // else {
+            //     $requests = $baseQuery
+            //         ->where(function ($q) use ($userId) {
+            //             $q->where('user', $userId)
+            //                 ->orWhereHas('currentWorkflowRole', function ($w) use ($userId) {
+            //                     $w->where('assigned_user_id', $userId)
+            //                         ->where('status', 'pending');
+            //                 });
+            //         })
+            //         ->orderByDesc('id')
+            //         ->get();
+            // }
 
             $countQuery = ModelsRequest::query();
 
