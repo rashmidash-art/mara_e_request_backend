@@ -30,7 +30,6 @@ class CreateRequestController extends Controller
             $auth = Auth::user();
             $isEntityLogin = $auth instanceof Entiti;
             $isSuperAdmin = ! $isEntityLogin && isset($auth->user_type) && $auth->user_type == 0;
-
             $query = ModelsRequest::with([
                 'categoryData:id,name',
                 'entityData:id,name',
@@ -39,9 +38,7 @@ class CreateRequestController extends Controller
                 'departmentData:id,name',
                 'supplierData:id,name',
                 'budgetCode:id,budget_code',
-                'documents:id,request_id,document_id,document',
-                'requestDetailsDocuments:id,request_id,request_details_id,is_po_created,is_delivery_completed,is_payment_completed',
-
+                'documents:id,request_id,document_id,document', // Eager load the documents
                 'currentWorkflowRole' => function ($q) {
                     $q->select(
                         'id',
@@ -56,7 +53,6 @@ class CreateRequestController extends Controller
                 'currentWorkflowRole.assignedUser:id,name',
                 'currentWorkflowRole.workflowStep:id,name',
             ])->orderByDesc('id');
-
             if ($isSuperAdmin) {
                 $requests = $query->get();
             } elseif ($isEntityLogin) {
@@ -74,39 +70,13 @@ class CreateRequestController extends Controller
 
                 $workflow = $req->currentWorkflowRole;
 
-                // ------------------------ FINAL STATUS LOGIC ------------------------
-                $finalStatusData = $req->getFinalStatus(); // ['final_status', 'pending_by']
-
-                $doc = $req->requestDetailsDocuments->first(); // Document-based flags
-                $documentStatus = null;
-                if ($doc) {
-                    if ($doc->is_payment_completed == 1) {
-                        $documentStatus = 'Payment Completed';
-                    } elseif ($doc->is_delivery_completed == 1) {
-                        $documentStatus = 'Delivery Completed';
-                    } elseif ($doc->is_po_created == 1) {
-                        $documentStatus = 'PO Created';
-                    } elseif ($req->status == 'submitted') {
-                        $documentStatus = 'Approved';
-                    }
-                }
-
-                // Decide which status to show
-                $requestStatus = in_array($finalStatusData['final_status'], ['Draft', 'Withdrawn', 'Rejected', 'In Approval', 'Submitted'])
-                    ? $finalStatusData['final_status']
-                    : $documentStatus ?? $finalStatusData['final_status'];
-
-                $requestPendingBy = $finalStatusData['pending_by'] ?? null;
-
-                // ------------------------ RESPONSE MAPPING ------------------------
                 return [
                     'id' => $req->id,
                     'request_id' => $req->request_id,
                     'amount' => $req->amount,
                     'priority' => $req->priority,
                     'description' => $req->description,
-                    'status' => $requestStatus,
-                    'pending_by' => $requestPendingBy,
+                    'status' => $req->status,
                     'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
 
                     'user' => [
@@ -146,7 +116,16 @@ class CreateRequestController extends Controller
                         'status' => $workflow?->status,
                     ],
 
+                    // Include documents with only document_id and document name
+                    // 'documents' => $req->documents->map(function ($doc) {
+                    //     return [
+                    //         'document_id' => $doc->document_id,
+                    //         'document'    => $doc->document
+                    //     ];
+                    // }),
+
                     'documents' => $req->documents->map(function ($doc) {
+                        // Extract the actual filename after the last underscore
                         $filename = last(explode('_', $doc->document));
 
                         return [
