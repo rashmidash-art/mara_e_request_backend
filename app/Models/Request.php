@@ -26,6 +26,7 @@ class Request extends Model
         'priority',
         'behalf_of',
         'behalf_of_department',
+        'behalf_of_buget_code',
         'business_justification',
         'status',
     ];

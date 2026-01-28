@@ -176,6 +176,8 @@ class CreateRequestController extends Controller
                 'attachments.*.document_id' => 'required|integer',
                 'attachments.*.file' => 'required|file|max:10240',
                 'budget_code' => 'required|exists:budget_codes,id',
+                'behalf_of_buget_code' => 'required_if:behalf_of,1|exists:budget_codes,id',
+
             ]);
 
             // ------------------------- CREATE REQUEST ID ------------------------- //
@@ -200,6 +202,7 @@ class CreateRequestController extends Controller
                 'priority' => $request->priority,
                 'behalf_of' => $request->behalf_of,
                 'behalf_of_department' => $request->behalf_of_department,
+                'behalf_of_buget_code' => $request->behalf_of_buget_code,
                 'business_justification' => $request->business_justification,
                 'status' => $request->status ?? 'draft',
             ]);
@@ -437,6 +440,33 @@ class CreateRequestController extends Controller
                 'message' => 'Request withdrawn successfully',
             ]);
         }
+
+        /**
+         * ===============================
+         * NORMAL UPDATE (DRAFT / SUBMIT)
+         * ===============================
+         */
+        $validated = $request->validate([
+            'entiti' => 'nullable',
+            'user' => 'nullable|integer',
+            'request_type' => 'nullable|integer',
+            'category' => 'nullable|integer',
+            'department' => 'nullable|integer',
+            'budget_code' => 'nullable|integer',
+            'amount' => 'nullable|string',
+            'description' => 'nullable|string',
+            'supplier_id' => 'nullable|integer',
+            'expected_date' => 'nullable|string',
+            'priority' => 'nullable|string',
+            'behalf_of' => 'nullable|integer|in:0,1',
+            'behalf_of_department' => 'nullable|integer',
+            'behalf_of_buget_code' => 'nullable|string',
+            'business_justification' => 'nullable|string',
+            'status' => 'nullable|in:submitted,draft,deleted',
+        ]);
+
+        $req->update($validated);
+        Log::info('UPDATE PAYLOAD', $request->all());
 
         /**
          * ===============================
