@@ -10,6 +10,7 @@ use App\Models\Request as ModelsRequest;
 use App\Models\RequestDetailsDocuments;
 use App\Models\RequestDocument;
 use App\Models\RequestWorkflowDetails;
+use App\Models\SupplierRating;
 use App\Models\User;
 use App\Models\WorkFlow;
 use App\Models\WorkflowRoleAssign;
@@ -393,12 +394,6 @@ class CreateRequestController extends Controller
     /** Update request */
     public function update(Request $request, $id)
     {
-
-        Log::info('FILES', $request->allFiles());
-        Log::info('HAS PO FILE', [
-            'has_po' => $request->hasFile('po_documents'),
-        ]);
-
         $req = ModelsRequest::find($id);
 
         if (! $req) {
@@ -414,6 +409,7 @@ class CreateRequestController extends Controller
          * ===============================
          */
         if ($request->status === 'withdraw') {
+
             if ($req->status !== 'submitted') {
                 return response()->json([
                     'status' => 'error',
@@ -422,17 +418,11 @@ class CreateRequestController extends Controller
             }
 
             DB::transaction(function () use ($req) {
-                $req->update([
-                    'status' => 'withdraw',
-                    'updated_at' => now(),
-                ]);
+                $req->update(['status' => 'withdraw']);
 
                 RequestWorkflowDetails::where('request_id', $req->request_id)
                     ->where('status', 'pending')
-                    ->update([
-                        'status' => 'withdraw',
-                        'updated_at' => now(),
-                    ]);
+                    ->update(['status' => 'withdraw']);
             });
 
             return response()->json([
@@ -443,123 +433,206 @@ class CreateRequestController extends Controller
 
         /**
          * ===============================
-         * NORMAL UPDATE (DRAFT / SUBMIT)
+         * VALIDATION (FULL)
          * ===============================
          */
         $validated = $request->validate([
-            'entiti' => 'nullable',
+            // Request master
+            'entiti' => 'nullable|integer',
             'user' => 'nullable|integer',
             'request_type' => 'nullable|integer',
             'category' => 'nullable|integer',
             'department' => 'nullable|integer',
-            'budget_code' => 'nullable|integer',
+            'budget_code' => 'nullable|exists:budget_codes,id',
             'amount' => 'nullable|string',
             'description' => 'nullable|string',
             'supplier_id' => 'nullable|integer',
             'expected_date' => 'nullable|string',
             'priority' => 'nullable|string',
-            'behalf_of' => 'nullable|integer|in:0,1',
-            'behalf_of_department' => 'nullable|integer',
-            'behalf_of_buget_code' => 'nullable|string',
+            'behalf_of' => 'nullable|in:0,1',
+            'behalf_of_department' => 'required_if:behalf_of,1',
+            'behalf_of_buget_code' => 'required_if:behalf_of,1|exists:budget_codes,id',
             'business_justification' => 'nullable|string',
-            'status' => 'nullable|in:submitted,draft,deleted',
+            'status' => 'nullable|string',
+
+            // Normal attachments
+            'attachments' => 'nullable|array',
+            'attachments.*.document_id' => 'required|integer',
+            'attachments.*.file' => 'required|file|max:10240',
+
+            // PO / Delivery / Payment
+            'po_documents' => 'nullable|file|max:10240',
+            'delivery_completed_documents' => 'nullable|file|max:10240',
+            'payment_completed_documents' => 'nullable|file|max:10240',
+
+            // Supplier rating
+            'rating' => 'nullable|integer|min:1|max:5',
+            'comment' => 'nullable|string|max:1000',
         ]);
 
-        $req->update($validated);
-        Log::info('UPDATE PAYLOAD', $request->all());
+        DB::transaction(function () use ($request, $req) {
 
-        /**
-         * ===============================
-         * DOCUMENT UPLOAD
-         * ===============================
-         */
-        if (
-            $request->hasFile('po_documents') ||
-            $request->hasFile('delivery_completed_documents') ||
-            $request->hasFile('payment_completed_documents')
-        ) {
-            DB::transaction(function () use ($request, $req) {
+            /**
+             * ===============================
+             * UPDATE REQUEST MASTER
+             * ===============================
+             */
+            $req->update($request->only([
+                'entiti',
+                'user',
+                'request_type',
+                'category',
+                'department',
+                'budget_code',
+                'amount',
+                'description',
+                'supplier_id',
+                'expected_date',
+                'priority',
+                'behalf_of',
+                'behalf_of_department',
+                'behalf_of_buget_code',
+                'business_justification',
+                'status',
+            ]));
 
-                $doc = RequestDetailsDocuments::updateOrCreate(
-                    ['request_id' => $req->request_id],
-                    ['request_details_id' => $req->id]
-                );
+            /**
+             * ===============================
+             * NORMAL ATTACHMENTS (LIKE STORE)
+             * ===============================
+             */
+            if (! empty($request->attachments)) {
+                foreach ($request->attachments as $index => $doc) {
 
-                /* ---------- PO ---------- */
-                if ($request->hasFile('po_documents')) {
-                    $file = $request->file('po_documents');
-                    $name = 'po_'.$req->request_id.'_'.$file->getClientOriginalName();
-                    $file->storeAs('request_documents', $name, 'public');
+                    $file = $request->file("attachments.$index.file");
+                    if (! $file) {
+                        continue;
+                    }
 
-                    $doc->update([
-                        'is_po_created' => 1,
-                        'po_number' => $request->po_number,
-                        'po_date' => $request->po_date,
-                        'po_documents' => $name,
+                    $departmentName = Department::find($req->department)->name ?? 'unknown';
+                    $departmentName = str_replace(' ', '_', strtolower($departmentName));
+
+                    $fileName = $req->request_id.'_'.$req->entiti.'_'.$departmentName.'_'.$file->getClientOriginalName();
+                    $file->storeAs('requestdocuments', $fileName, 'public');
+
+                    RequestDocument::create([
+                        'request_id' => $req->request_id,
+                        'document_id' => $doc['document_id'],
+                        'document' => $fileName,
                     ]);
                 }
+            }
 
-                /* ---------- DELIVERY ---------- */
-                if ($request->hasFile('delivery_completed_documents')) {
-                    $file = $request->file('delivery_completed_documents');
-                    $name = 'delivery_'.$req->request_id.'_'.$file->getClientOriginalName();
-                    $file->storeAs('request_documents', $name, 'public');
+            /**
+             * ===============================
+             * REQUEST DETAIL DOCUMENTS
+             * ===============================
+             */
+            $doc = RequestDetailsDocuments::firstOrCreate(
+                ['request_id' => $req->request_id],
+                ['request_details_id' => $req->id]
+            );
 
-                    $doc->update([
-                        'is_delivery_completed' => 1,
-                        'delivery_completed_number' => $request->delivery_completed_number,
-                        'delivery_completed_date' => $request->delivery_completed_date,
-                        'delivery_completed_documents' => $name,
-                    ]);
-                }
+            /**
+             * ===============================
+             * PO UPLOAD
+             * ===============================
+             */
+            if ($request->hasFile('po_documents')) {
 
-                /* ---------- PAYMENT ---------- */
-                if ($request->hasFile('payment_completed_documents')) {
-                    $file = $request->file('payment_completed_documents');
-                    $name = 'payment_'.$req->request_id.'_'.$file->getClientOriginalName();
-                    $file->storeAs('request_documents', $name, 'public');
+                $file = $request->file('po_documents');
+                $name = 'po_'.$req->request_id.'_'.$file->getClientOriginalName();
+                $file->storeAs('request_documents', $name, 'public');
 
-                    $doc->update([
-                        'is_payment_completed' => 1,
-                        'payment_completed_number' => $request->payment_completed_number,
-                        'payment_completed_date' => $request->payment_completed_date,
-                        'payment_completed_documents' => $name,
-                    ]);
-
-                    Log::info('DOC MODEL', [
-                        'table' => $doc->getTable(),
-                        'id' => $doc->id,
-                        'connection' => $doc->getConnectionName(),
-                    ]);
-                }
-
-                // $doc->status = strtolower($doc->getCurrentStatus());
-
-                Log::info('DB NAME', [
-                    DB::connection()->getDatabaseName(),
+                $doc->update([
+                    'is_po_created' => 1,
+                    'po_number' => $request->po_number,
+                    'po_date' => $request->po_date,
+                    'po_documents' => $name,
                 ]);
-                $doc->save();
-            });
+            }
 
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Documents uploaded successfully',
-            ]);
-        }
+            /**
+             * ===============================
+             * DELIVERY (PO REQUIRED)
+             * ===============================
+             */
+            if ($request->hasFile('delivery_completed_documents')) {
 
-        /**
-         * ===============================
-         * NORMAL UPDATE
-         * ===============================
-         */
-        $validated = $request->validate([
-            'amount' => 'nullable|string',
-            'description' => 'nullable|string',
-            'priority' => 'nullable|string',
-            'status' => 'nullable|in:submitted,draft,deleted',
-        ]);
+                if (! $doc->is_po_created) {
+                    throw new \Exception('Upload PO before delivery');
+                }
 
-        $req->update($validated);
+                $file = $request->file('delivery_completed_documents');
+                $name = 'delivery_'.$req->request_id.'_'.$file->getClientOriginalName();
+                $file->storeAs('request_documents', $name, 'public');
+
+                $doc->update([
+                    'is_delivery_completed' => 1,
+                    'delivery_completed_number' => $request->delivery_completed_number,
+                    'delivery_completed_date' => $request->delivery_completed_date,
+                    'delivery_completed_documents' => $name,
+                ]);
+            }
+
+            /**
+             * ===============================
+             * PAYMENT (DELIVERY REQUIRED)
+             * ===============================
+             */
+            if ($request->hasFile('payment_completed_documents')) {
+
+                if (! $doc->is_delivery_completed) {
+                    throw new \Exception('Complete delivery before payment');
+                }
+
+                $file = $request->file('payment_completed_documents');
+                $name = 'payment_'.$req->request_id.'_'.$file->getClientOriginalName();
+                $file->storeAs('request_documents', $name, 'public');
+
+                $doc->update([
+                    'is_payment_completed' => 1,
+                    'payment_completed_number' => $request->payment_completed_number,
+                    'payment_completed_date' => $request->payment_completed_date,
+                    'payment_completed_documents' => $name,
+                ]);
+            }
+
+            /**
+             * ===============================
+             * SUPPLIER RATING (PAYMENT REQUIRED)
+             * ===============================
+             */
+            if ($request->filled('rating')) {
+
+                if ($req->user !== Auth::id()) {
+                    throw new \Exception('Only request owner can rate supplier');
+                }
+
+                if (! $doc->is_payment_completed) {
+                    throw new \Exception('Complete payment before rating');
+                }
+
+                if (! $req->supplier_id) {
+                    throw new \Exception('No supplier linked to request');
+                }
+
+                if (SupplierRating::where('request_id', $req->request_id)->exists()) {
+                    throw new \Exception('Supplier already rated');
+                }
+
+                SupplierRating::create([
+                    'request_id' => $req->request_id,
+                    'user_id' => Auth::id(),
+                    'supplier_id' => $req->supplier_id,
+                    'rating' => $request->rating,
+                    'comment' => $request->comment,
+                    'status' => 'completed',
+                ]);
+
+                $req->update(['status' => 'closed']);
+            }
+        });
 
         return response()->json([
             'status' => 'success',

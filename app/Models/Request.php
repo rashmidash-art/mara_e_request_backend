@@ -120,9 +120,22 @@ class Request extends Model
         return $this->hasOne(RequestDetailsDocuments::class, 'request_id', 'request_id');
     }
 
+    public function supplierRating()
+    {
+        return $this->hasOne(SupplierRating::class, 'request_id', 'request_id');
+    }
+
     public function getFinalStatus()
     {
         // Step 1-5: Workflow statuses
+
+        if ($this->status === 'closed') {
+            return [
+                'final_status' => 'Closed',
+                'pending_by' => 'Completed',
+            ];
+        }
+
         if ($this->status === 'draft') {
             return [
                 'final_status' => 'Draft',
@@ -133,7 +146,7 @@ class Request extends Model
         if ($this->status === 'withdraw') {
             return [
                 'final_status' => 'Withdrawn',
-                'pending_by' => null,
+                'pending_by' => 'Withdrawn',
             ];
         }
 
@@ -171,7 +184,7 @@ class Request extends Model
                 if ($doc->is_payment_completed == 1) {
                     return [
                         'final_status' => 'Payment Completed',
-                        'pending_by' => 'Completed',
+                        'pending_by' => 'Payment Completed',
                     ];
                 }
 

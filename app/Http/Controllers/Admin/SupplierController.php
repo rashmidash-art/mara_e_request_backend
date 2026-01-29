@@ -5,10 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Department;
+use App\Models\Request as ModelsRequest;
 use App\Models\Supplier;
-use Illuminate\Http\Request;
-use Illuminate\Database\QueryException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class SupplierController extends Controller
@@ -19,18 +20,52 @@ class SupplierController extends Controller
     public function index()
     {
         try {
+            // Fetch all suppliers
             $suppliers = Supplier::all();
 
-            // Transform suppliers to include category & department details
+            // Transform suppliers
             $suppliers = $suppliers->map(function ($supplier) {
+                // Categories & departments
                 $categoryIds = $supplier->categories ? explode(',', $supplier->categories) : [];
                 $categories = Category::whereIn('id', $categoryIds)->get(['id', 'name']);
-
                 $departmentIds = $supplier->departments ? explode(',', $supplier->departments) : [];
                 $departments = Department::whereIn('id', $departmentIds)->get(['id', 'name']);
 
                 $supplier->categories_detail = $categories;
                 $supplier->departments_detail = $departments;
+
+                // Fetch requests for this supplier with ratings
+                $requests = ModelsRequest::with('requestTypeData:id,name', 'categoryData:id,name', 'supplierRating')
+                    ->where('supplier_id', $supplier->id)
+                    ->get()
+                    ->map(function ($r) {
+                        return [
+                            'request_id' => $r->request_id,
+                            'title' => $r->requestTypeData->name ?? '—',
+                            'category' => $r->categoryData->name ?? '—',
+                            'amount' => $r->amount,
+                            'status' => $r->status,
+                            'user_rating' => $r->supplierRating->rating ?? null,
+                            'comment' => $r->supplierRating->comment ?? null,
+                        ];
+                    });
+
+                $supplier->requests = $requests;
+
+                // Calculate average rating for this supplier
+                $supplier->avg_rating = $requests->avg('user_rating');
+
+                // Total requests
+                $supplier->total_requests = $requests->count();
+
+                // Completed ratings (requests that have a supplier rating)
+                $supplier->completed_ratings = $requests->filter(fn ($r) => $r['user_rating'] !== null)->count();
+
+                // Average rating across all rated requests
+                $supplier->avg_rating = $requests->filter(fn ($r) => $r['user_rating'] !== null)
+                    ->avg('user_rating')
+                                                ? round($requests->filter(fn ($r) => $r['user_rating'] !== null)->avg('user_rating'), 1)
+                                                : null;
 
                 return $supplier;
             });
@@ -38,13 +73,14 @@ class SupplierController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Suppliers retrieved successfully',
-                'data' => $suppliers
+                'data' => $suppliers,
             ], 200);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve suppliers',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -84,6 +120,7 @@ class SupplierController extends Controller
                     ->map(function ($file) use ($field) {
                         $filename = $file->getClientOriginalName(); //  Original name only
                         $file->storeAs("upload/{$field}", $filename, 'public');
+
                         return $filename;
                     })
                     ->toArray();
@@ -97,17 +134,16 @@ class SupplierController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Supplier created successfully',
-                'data' => $supplier
+                'data' => $supplier,
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to create supplier',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     /**
      * Display a specific supplier.
@@ -117,26 +153,58 @@ class SupplierController extends Controller
         try {
             $supplier = Supplier::findOrFail($id);
 
+            // Categories
             $categoryIds = $supplier->categories ? explode(',', $supplier->categories) : [];
             $categories = Category::whereIn('id', $categoryIds)->get(['id', 'name']);
 
+            // Departments
             $departmentIds = $supplier->departments ? explode(',', $supplier->departments) : [];
             $departments = Department::whereIn('id', $departmentIds)->get(['id', 'name']);
 
             $supplier->categories_detail = $categories;
             $supplier->departments_detail = $departments;
 
+            // Requests + ratings
+            $requests = ModelsRequest::with('requestTypeData:id,name', 'categoryData:id,name', 'supplierRating')
+                ->where('supplier_id', $supplier->id)
+                ->get()
+                ->map(function ($r) {
+                    return [
+                        'request_id' => $r->request_id,
+                        'title' => $r->requestTypeData->name ?? '—',
+                        'category' => $r->categoryData->name ?? '—',
+                        'amount' => $r->amount,
+                        'status' => $r->status,
+                        'user_rating' => $r->supplierRating->rating ?? null,
+                        'comment' => $r->supplierRating->comment ?? null,
+                        'created_at' => $r->created_at,
+                    ];
+                });
+
+            $supplier->requests = $requests;
+
+            // Stats
+            $supplier->total_requests = $requests->count();
+
+            $ratedRequests = $requests->filter(fn ($r) => $r['user_rating'] !== null);
+
+            $supplier->completed_ratings = $ratedRequests->count();
+
+            $supplier->avg_rating = $ratedRequests->count()
+                ? round($ratedRequests->avg('user_rating'), 1)
+                : null;
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Supplier retrieved successfully',
-                'data' => $supplier
+                'data' => $supplier,
             ], 200);
+
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Supplier not found',
-                'error' => $e->getMessage()
-            ], 401);
+            ], 404);
         }
     }
 
@@ -184,19 +252,19 @@ class SupplierController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Supplier updated successfully',
-                'data' => $supplier
+                'data' => $supplier,
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Supplier not found',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 401);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update supplier',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -212,19 +280,19 @@ class SupplierController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Supplier deleted successfully'
+                'message' => 'Supplier deleted successfully',
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Supplier not found',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 401);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete supplier',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

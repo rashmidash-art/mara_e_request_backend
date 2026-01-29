@@ -12,6 +12,7 @@ class SupplierRating extends Model
     protected $fillable = [
         'request_id',
         'user_id',
+        'supplier_id',
         'comment',
         'rating',
         'status'
