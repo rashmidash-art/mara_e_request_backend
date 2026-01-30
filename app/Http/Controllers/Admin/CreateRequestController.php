@@ -34,7 +34,7 @@ class CreateRequestController extends Controller
             $query = ModelsRequest::with([
                 'categoryData:id,name',
                 'entityData:id,name',
-                'userData:id,name',
+                'userData:id,name,designation',
                 'requestTypeData:id,name',
                 'departmentData:id,name',
                 'supplierData:id,name',
@@ -71,6 +71,15 @@ class CreateRequestController extends Controller
 
                 $workflow = $req->currentWorkflowRole;
 
+                $finalStatus = $req->getFinalStatus();
+
+                $currentStage = match ($finalStatus['final_status']) {
+                    'Withdrawn' => 'Withdrawn',
+                    'Rejected' => 'Rejected',
+                    'Closed' => 'Completed',
+                    default => $finalStatus['pending_by'],
+                };
+
                 return [
                     'id' => $req->id,
                     'request_id' => $req->request_id,
@@ -78,11 +87,18 @@ class CreateRequestController extends Controller
                     'priority' => $req->priority,
                     'description' => $req->description,
                     'status' => $req->status,
+
                     'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
+                    'updated_at' => $req->updated_at?->format('Y-m-d H:i:s'),
+
+                    'final_status' => $finalStatus['final_status'],
+                    'pending_by' => $finalStatus['pending_by'],
+                    'current_stage' => $currentStage,
 
                     'user' => [
                         'id' => $req->user,
                         'name' => $req->userData?->name,
+                        'designation' => $req->userData?->designation,
                     ],
 
                     'category' => [
@@ -93,6 +109,11 @@ class CreateRequestController extends Controller
                     'entity' => [
                         'id' => $req->entiti,
                         'name' => $req->entityData?->name,
+                    ],
+
+                    'department' => [
+                        'id' => $req->department,
+                        'name' => $req->departmentData?->name,
                     ],
 
                     'budget_code' => [
@@ -108,6 +129,11 @@ class CreateRequestController extends Controller
                     'request_type' => [
                         'id' => $req->request_type,
                         'name' => $req->requestTypeData?->name,
+                    ],
+
+                    'supplier' => [
+                        'id' => $req->supplier_id,
+                        'name' => $req->supplierData?->name,
                     ],
 
                     'workflow' => [
@@ -132,6 +158,7 @@ class CreateRequestController extends Controller
                         return [
                             'document_id' => $doc->document_id,
                             'document' => $filename,
+                            'url' => asset('storage/requestdocuments/'.$doc->document),
                         ];
                     }),
                 ];
@@ -952,7 +979,7 @@ class CreateRequestController extends Controller
                         return [
                             'document_id' => $doc->document_id,
                             'document' => last(explode('_', $doc->document)),
-                            'url' => url('storage/requestdocuments/'.$doc->document),
+                            'url' => asset('storage/requestdocuments/'.$doc->document),
                         ];
                     }),
 
