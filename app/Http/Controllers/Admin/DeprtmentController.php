@@ -316,60 +316,60 @@ class DeprtmentController extends Controller
         }
     }
 
-    // public function getByEntity($id)
-    // {
-    //     $departments = Department::where('entiti_id', $id)->get();
-
-    //     return response()->json([
-    //         'status' => 'success',
-    //         'departments' => $departments,
-    //     ]);
-    // }
-
     public function getByEntity($id)
     {
-        try {
-            $entity = Entiti::findOrFail($id);
+        $departments = Department::where('entiti_id', $id)->get();
 
-            $departments = Department::where('entiti_id', $id)->get();
-
-            //  If no departments, return empty list (IMPORTANT)
-            if ($departments->isEmpty()) {
-                return response()->json([
-                    'status' => 'success',
-                    'departments' => [],
-                ], 200);
-            }
-
-            //  Add "All Departments" ONLY if departments exist
-            $allOption = [
-                'id' => 0,
-                'name' => 'All Departments',
-                'budget' => $entity->budget,
-                'entiti_id' => $entity->id,
-                'bc_dimention_value' => null,
-                'enable_cost_center' => 0,
-                'description' => null,
-                'status' => 1,
-                'manager_id' => null,
-            ];
-
-            $departmentsArray = $departments->toArray();
-            array_unshift($departmentsArray, $allOption);
-
-            return response()->json([
-                'status' => 'success',
-                'departments' => $departmentsArray,
-            ], 200);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to retrieve departments',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
+        return response()->json([
+            'status' => 'success',
+            'departments' => $departments,
+        ]);
     }
+
+    // public function getByEntity($id)
+    // {
+    //     try {
+    //         $entity = Entiti::findOrFail($id);
+
+    //         $departments = Department::where('entiti_id', $id)->get();
+
+    //         //  If no departments, return empty list (IMPORTANT)
+    //         if ($departments->isEmpty()) {
+    //             return response()->json([
+    //                 'status' => 'success',
+    //                 'departments' => [],
+    //             ], 200);
+    //         }
+
+    //         //  Add "All Departments" ONLY if departments exist
+    //         $allOption = [
+    //             'id' => 0,
+    //             'name' => 'All Departments',
+    //             'budget' => $entity->budget,
+    //             'entiti_id' => $entity->id,
+    //             'bc_dimention_value' => null,
+    //             'enable_cost_center' => 0,
+    //             'description' => null,
+    //             'status' => 1,
+    //             'manager_id' => null,
+    //         ];
+
+    //         $departmentsArray = $departments->toArray();
+    //         array_unshift($departmentsArray, $allOption);
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'departments' => $departmentsArray,
+    //         ], 200);
+
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Failed to retrieve departments',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
 
     public function getUserbyDepartment($id)
     {

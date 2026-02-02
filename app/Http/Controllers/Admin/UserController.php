@@ -117,7 +117,8 @@ class UserController extends Controller
                 'password' => Hash::make($request->password),
                 'employee_id' => $request->employee_id,
                 'entiti_id' => $request->entiti_id,
-                'department_id' => $request->department_id ?? 0, // 0 = all departments
+                'department_id' => $request->department_id, // 0 = all departments
+                'behalf_of_department' => $request->behalf_of_department,
                 'loa' => $request->loa,
                 'signature' => '',
                 'status' => $request->status,
@@ -162,29 +163,85 @@ class UserController extends Controller
     {
         try {
             $user = User::findOrFail($id);
+            $authUser = $request->user();
 
-            // Validation
+            /**
+             * ==============================
+             * SELF PROFILE UPDATE (SAFE PATH)
+             * ==============================
+             * Applies when user updates own profile
+             * Works for:
+             * - User
+             * - Entity Admin
+             * - Master Admin
+             */
+            if ($authUser instanceof User && $authUser->id === $user->id) {
+
+                // --- Validation for self update ---
+                $request->validate([
+                    'name' => 'sometimes|required|string|max:255',
+                    'password' => 'nullable|string|min:6',
+                    'current_password' => 'required_with:password',
+                ]);
+
+                $data = [];
+
+                // Update name
+                if ($request->filled('name')) {
+                    $data['name'] = $request->name;
+                }
+
+                // Update password
+                if ($request->filled('password')) {
+
+                    if (! Hash::check($request->current_password, $user->password)) {
+                        return response()->json([
+                            'status' => 'error',
+                            'message' => 'Failed to update password',
+                            'errors' => [
+                                'current_password' => ['Current password is incorrect'],
+                            ],
+                        ], 422);
+                    }
+
+                    $data['password'] = Hash::make($request->password);
+                }
+
+                // Nothing to update
+                if (empty($data)) {
+                    return response()->json([
+                        'status' => 'success',
+                        'message' => 'No changes detected',
+                        'data' => $user,
+                    ], 200);
+                }
+
+                $user->update($data);
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Profile updated successfully',
+                    'data' => $user,
+                ], 200);
+            }
+
+            /**
+             * ==============================
+             * ADMIN / ENTITY USER MANAGEMENT
+             * ==============================
+             */
+
+            // Validation for admin edit
             $request->validate([
                 'name' => 'sometimes|required|string|max:255',
                 'designation' => 'sometimes|required|string|max:255',
-                // 'current_password' => 'required_with:password',
-                'password' => 'sometimes|required|string|min:6',
+                'password' => 'nullable|string|min:6',
                 'email' => [
                     'sometimes',
                     'required',
                     'email',
                     Rule::unique('users', 'email')->ignoreModel($user),
                 ],
-
-                // 'password' => 'sometimes|required|string|min:6',
-
-                // 'employee_id' => [
-                //     'sometimes',
-                //     'required',
-                //     'string',
-                //     Rule::unique('users', 'employee_id')->ignoreModel($user),
-                // ],
-
                 'entiti_id' => 'sometimes|required|integer|exists:entitis,id',
                 'department_id' => 'nullable|integer',
                 'loa' => 'sometimes|required|numeric|min:0',
@@ -198,6 +255,7 @@ class UserController extends Controller
 
             $entity = Entiti::findOrFail($entiti_id);
 
+            // LOA validation
             if ($department_id == 0) {
                 if ($request->has('loa') && $request->loa > $entity->budget) {
                     return response()->json([
@@ -226,42 +284,19 @@ class UserController extends Controller
                 'name',
                 'designation',
                 'email',
-                // 'employee_id',
                 'entiti_id',
                 'department_id',
+                'behalf_of_department',
                 'loa',
                 'status',
             ]);
 
-            // if ($request->has('password')) {
-            //     $data['password'] = Hash::make($request->password);
-            // }
-
+            // Admin password reset (no current password required)
             if ($request->filled('password')) {
-
-                if (Auth::check() && Auth::id() === $user->id) {
-
-                    if (! $request->filled('current_password')) {
-                        return response()->json([
-                            'status' => 'error',
-                            'message' => 'Current password is required',
-                        ], 422);
-                    }
-
-                    if (! Hash::check($request->current_password, $user->password)) {
-                        return response()->json([
-                            'status' => 'error',
-                            'message' => 'Failed to update password',
-                            'errors' => [
-                                'current_password' => ['Current password is incorrect'],
-                            ],
-                        ], 422);
-                    }
-                }
-
                 $data['password'] = Hash::make($request->password);
             }
 
+            // Signature upload
             if ($request->hasFile('signature')) {
                 if ($user->signature) {
                     Storage::disk('public')->delete($user->signature);
@@ -298,6 +333,169 @@ class UserController extends Controller
             ], 500);
         }
     }
+
+    // public function update(Request $request, $id)
+    // {
+    //     try {
+    //         $user = User::findOrFail($id);
+    //         $authUser = $request->user();
+    //         // Validation
+    //         $request->validate([
+    //             'name' => 'sometimes|required|string|max:255',
+    //             'designation' => 'sometimes|required|string|max:255',
+    //             // 'current_password' => 'required_with:password',
+    //             // 'password' => 'sometimes|required|string|min:6',
+    //             'password' => 'nullable|string|min:6',
+    //             'email' => [
+    //                 'sometimes',
+    //                 'required',
+    //                 'email',
+    //                 Rule::unique('users', 'email')->ignoreModel($user),
+    //             ],
+    //             'entiti_id' => 'sometimes|required|integer|exists:entitis,id',
+    //             'department_id' => 'nullable|integer',
+    //             'loa' => 'sometimes|required|numeric|min:0',
+    //             'signature' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048',
+    //             'status' => ['sometimes', 'required', Rule::in(['Active', 'Inactive', 'Away'])],
+    //             'roles' => 'sometimes|array',
+    //         ]);
+
+    //         $entiti_id = $request->entiti_id ?? $user->entiti_id;
+    //         $department_id = $request->department_id ?? 0;
+
+    //         $entity = Entiti::findOrFail($entiti_id);
+
+    //         if ($department_id == 0) {
+    //             if ($request->has('loa') && $request->loa > $entity->budget) {
+    //                 return response()->json([
+    //                     'status' => 'error',
+    //                     'message' => 'Requested LOA exceeds entity budget.',
+    //                 ], 400);
+    //             }
+    //         } else {
+    //             $department = Department::find($department_id);
+    //             if (! $department || $department->entiti_id != $entity->id) {
+    //                 return response()->json([
+    //                     'status' => 'error',
+    //                     'message' => 'The selected department does not belong to the specified entity.',
+    //                 ], 400);
+    //             }
+
+    //             if ($request->has('loa') && $request->loa > $department->budget) {
+    //                 return response()->json([
+    //                     'status' => 'error',
+    //                     'message' => 'Requested LOA exceeds department budget.',
+    //                 ], 400);
+    //             }
+    //         }
+
+    //         $data = $request->only([
+    //             'name',
+    //             'designation',
+    //             'email',
+    //             // 'employee_id',
+    //             'entiti_id',
+    //             'department_id',
+    //             'behalf_of_department',
+    //             'loa',
+    //             'status',
+    //         ]);
+
+    //         // if ($request->has('password')) {
+    //         //     $data['password'] = Hash::make($request->password);
+    //         // }
+
+    //         // if ($request->filled('password')) {
+
+    //         //     if (Auth::check() && Auth::id() === $user->id) {
+
+    //         //         if (! $request->filled('current_password')) {
+    //         //             return response()->json([
+    //         //                 'status' => 'error',
+    //         //                 'message' => 'Current password is required',
+    //         //             ], 422);
+    //         //         }
+
+    //         //         if (! Hash::check($request->current_password, $user->password)) {
+    //         //             return response()->json([
+    //         //                 'status' => 'error',
+    //         //                 'message' => 'Failed to update password',
+    //         //                 'errors' => [
+    //         //                     'current_password' => ['Current password is incorrect'],
+    //         //                 ],
+    //         //             ], 422);
+    //         //         }
+    //         //     }
+
+    //         //     $data['password'] = Hash::make($request->password);
+    //         // }
+
+    //         if ($request->filled('password')) {
+
+    //             $authUser = $request->user();
+
+    //             if ($authUser && $authUser->id === $user->id) {
+
+    //                 if (! $request->filled('current_password')) {
+    //                     return response()->json([
+    //                         'status' => 'error',
+    //                         'message' => 'Current password is required',
+    //                         'errors' => [
+    //                             'current_password' => ['Current password is required'],
+    //                         ],
+    //                     ], 422);
+    //                 }
+
+    //                 if (! Hash::check($request->current_password, $user->password)) {
+    //                     return response()->json([
+    //                         'status' => 'error',
+    //                         'message' => 'Failed to update password',
+    //                         'errors' => [
+    //                             'current_password' => ['Current password is incorrect'],
+    //                         ],
+    //                     ], 422);
+    //                 }
+    //             }
+
+    //             $data['password'] = Hash::make($request->password);
+    //         }
+
+    //         if ($request->hasFile('signature')) {
+    //             if ($user->signature) {
+    //                 Storage::disk('public')->delete($user->signature);
+    //             }
+
+    //             $file = $request->file('signature');
+    //             $filename = 'uid_'.$user->id.'_signature.'.$file->getClientOriginalExtension();
+    //             $data['signature'] = $file->storeAs('upload/signature', $filename, 'public');
+    //         }
+
+    //         $user->update($data);
+
+    //         if ($request->has('roles')) {
+    //             $user->roles()->sync($request->roles);
+    //         }
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'User updated successfully',
+    //             'data' => $user,
+    //         ], 200);
+
+    //     } catch (\Illuminate\Validation\ValidationException $e) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Validation failed',
+    //             'errors' => $e->errors(),
+    //         ], 422);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Failed to update user',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
 
     public function nextEmployeeId(Request $request)
     {

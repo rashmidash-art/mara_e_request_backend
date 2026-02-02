@@ -15,23 +15,37 @@ class CategoreController extends Controller
     /**
      * Display a listing of the resource.
      */
+    // public function index()
+    // {
+    //     try {
+    //         $categories = Category::all();
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'Categories retrieved successfully',
+    //             'data' => $categories,
+    //         ], 200);
+    //     } catch (QueryException $e) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Failed to retrieve categories',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
     public function index()
     {
-        try {
-            $categories = Category::all();
+        $categories = Category::with([
+            'requestTypes' => function ($q) {
+                $q->where('status', 1); // active only
+            },
+        ])->get();
 
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Categories retrieved successfully',
-                'data' => $categories,
-            ], 200);
-        } catch (QueryException $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to retrieve categories',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
+        return response()->json([
+            'status' => 'success',
+            'data' => $categories,
+        ]);
     }
 
     /**
@@ -42,7 +56,8 @@ class CategoreController extends Controller
         $request->validate([
             'name' => 'required|string|max:255|unique:categories,name',
             'description' => 'nullable|string',
-            'status' => ['required', Rule::in([0, 1])],
+            'status' => 'required|boolean',
+            // 'status' => ['required', Rule::in([0, 1])],
         ]);
 
         try {

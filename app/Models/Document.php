@@ -16,6 +16,8 @@ class Document extends Model
         'roles',
         'file_formats',
         'categories',
+        'request_types',
+        'max_count_type',
         'max_count',
         'expiry_days',
         'description',

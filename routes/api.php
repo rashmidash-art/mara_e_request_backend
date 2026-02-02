@@ -107,7 +107,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('department', DeprtmentController::class);
         Route::get('entities/{id}/departments', [DeprtmentController::class, 'getByEntity']);
         Route::get('department/{id}/users', action: [DeprtmentController::class, 'getUserbyDepartment']);
-        Route::get( '/department/{id}/budget-code',[DeprtmentController::class, 'getBudgetCodeByDepartment']);
+        Route::get('/department/{id}/budget-code', [DeprtmentController::class, 'getBudgetCodeByDepartment']);
 
         // For Users
         Route::get('users/search', [UserController::class, 'search']);
@@ -143,9 +143,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         // Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
         Route::apiResource('request', controller: CreateRequestController::class);
         // Route::get('/requestDetails', [CreateRequestController::class, 'requestDetailsAll']);
-        Route::get('/requests/actionable', [
-            CreateRequestController::class,
-            'myActionableRequests',
+        Route::get('/requests/actionable', [ CreateRequestController::class,'myActionableRequests',
         ]);
 
         Route::apiResource('entityReqyestType', controller: EntityRequestTypeController::class);
@@ -156,7 +154,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::get('budgetCode/preview', [BudgetCodeController::class, 'preview']);
         Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
         Route::post('/request-workflow/{request_id}/action', [RequestWorkflowDetailsController::class, 'takeAction']);
-        
+
     });
 
     // Route::middleware(['auth', 'role:admin'])->group(function () {

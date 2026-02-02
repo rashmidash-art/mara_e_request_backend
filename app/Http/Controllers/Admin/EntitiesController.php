@@ -9,6 +9,7 @@ use App\Models\Entiti;
 use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -71,7 +72,6 @@ class EntitiesController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-
             'email' => [
                 'required',
                 'email:rfc,dns',
@@ -79,31 +79,58 @@ class EntitiesController extends Controller
             ],
             'password' => 'required|string|min:6',
             'company_code' => 'nullable|string|max:50',
-            'budget' => [
-                'required',
-                'numeric',
-                'min:0',
-                'max:99999999.99',
-            ],
+            'budget' => 'required|numeric|min:0|max:99999999.99',
             'description' => 'nullable|string',
             'status' => ['required', Rule::in([0, 1])],
         ]);
 
-        $entity = Entiti::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => isset($validated['password']) ? Hash::make($validated['password']) : null,
-            'company_code' => $validated['company_code'] ?? null,
-            'budget' => $validated['budget'] ?? 0,
-            'description' => $validated['description'] ?? null,
-            'status' => $validated['status'] ?? 0,
-        ]);
+        DB::beginTransaction();
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Entity created successfully',
-            'data' => $entity,
-        ], 201);
+        try {
+            /**  Create Entity */
+            $entity = Entiti::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'password' => Hash::make($validated['password']),
+                'company_code' => $validated['company_code'] ?? null,
+                'budget' => $validated['budget'],
+                'description' => $validated['description'] ?? null,
+                'status' => $validated['status'],
+            ]);
+
+            /**  Create Default Department */
+            $departmentCode = 'ALL';
+
+            Department::create([
+                'entiti_id' => $entity->id,
+                'manager_id' => null,
+                'name' => 'All Department',
+                'department_code' => $departmentCode,
+                'bc_dimention_value' => Department::generateBcDimension($departmentCode),
+                'enable_cost_center' => 0,
+                'work_flow_type_id' => null,
+                'budget' => $entity->budget, // optional: full entity budget
+                'description' => 'Default department for entity',
+                'status' => 1,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Entity and default department created successfully',
+                'data' => $entity,
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to create entity',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**

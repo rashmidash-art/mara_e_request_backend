@@ -76,6 +76,17 @@ class RequestWorkflowDetailsController extends Controller
 
         // ------------------ APPROVE ------------------ //
         if ($request->action === 'approve') {
+
+            $requestData = ModelsRequest::where('request_id', $request_id)->first();
+
+            // Check if request amount exceeds user's LOA
+            if ($requestData->amount > $user->loa) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'You cannot approve this request as your LOA is less than the requested amount.',
+                ], 403);
+            }
+
             $current->update([
                 'status' => 'approved',
                 'remark' => $request->remark,
@@ -96,7 +107,7 @@ class RequestWorkflowDetailsController extends Controller
                 ]);
             }
 
-            //  ADD THIS LINE
+            // Sync request status
             $this->syncRequestStatus($request_id);
 
             return response()->json([
@@ -196,43 +207,43 @@ class RequestWorkflowDetailsController extends Controller
     //         $req->update(['status' => 'submitted']);
 
     //         return;
-        // }
+    // }
 
-        // If some approved & some pending → in approval
-        // if (
-        //     $steps->contains('status', 'approved') &&
-        //     $steps->contains('status', 'pending')
-        // ) {
-        //     $req->update(['status' => 'in_approval']);
+    // If some approved & some pending → in approval
+    // if (
+    //     $steps->contains('status', 'approved') &&
+    //     $steps->contains('status', 'pending')
+    // ) {
+    //     $req->update(['status' => 'in_approval']);
 
-        //     return;
-        // }
+    //     return;
+    // }
 
-        // If all approved → approved
-        // if ($steps->every(fn ($s) => $s->status === 'approved')) {
-        //     $req->update(['status' => 'approved']);
+    // If all approved → approved
+    // if ($steps->every(fn ($s) => $s->status === 'approved')) {
+    //     $req->update(['status' => 'approved']);
 
-        //     return;
-        // }
+    //     return;
+    // }
     // }
 
     private function syncRequestStatus(string $requestId)
-{
-    $req = ModelsRequest::where('request_id', $requestId)->first();
-    if (! $req) {
-        return;
-    }
+    {
+        $req = ModelsRequest::where('request_id', $requestId)->first();
+        if (! $req) {
+            return;
+        }
 
-    $steps = RequestWorkflowDetails::where('request_id', $requestId)->get();
+        $steps = RequestWorkflowDetails::where('request_id', $requestId)->get();
 
-    // If any rejected → keep submitted (UI will show Rejected)
-    if ($steps->contains('status', 'rejected')) {
+        // If any rejected → keep submitted (UI will show Rejected)
+        if ($steps->contains('status', 'rejected')) {
+            $req->update(['status' => 'submitted']);
+
+            return;
+        }
+
+        // Once workflow starts, it is always submitted
         $req->update(['status' => 'submitted']);
-        return;
     }
-
-    // Once workflow starts, it is always submitted
-    $req->update(['status' => 'submitted']);
-}
-
 }

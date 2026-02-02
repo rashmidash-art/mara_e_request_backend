@@ -28,6 +28,7 @@ class User extends Authenticatable
         'employee_id',
         'entiti_id',
         'department_id',
+        'behalf_of_department',
         'loa',
         'signature',
         'status',
