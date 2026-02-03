@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\Document;
 use App\Models\Entiti;
 use App\Models\FileFormat;
+use App\Models\RequestType;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -441,6 +442,50 @@ class DocumentController extends Controller
             ];
         });
         Log::info("Documents retrieved for category: $id");
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $documents,
+        ]);
+    }
+
+    public function getDocumentsByRequestType($id)
+    {
+        Log::info("DocumentController@getDocumentsByRequestType called with request_type: $id");
+
+        $documents = Document::whereRaw('FIND_IN_SET(?, request_types)', [$id])->get();
+
+        $documents = $documents->map(function ($doc) {
+
+            $fileFormatIds = $doc->file_formats ? explode(',', $doc->file_formats) : [];
+            $categoryIds = $doc->categories ? explode(',', $doc->categories) : [];
+            $requestTypeIds = $doc->request_types ? explode(',', $doc->request_types) : [];
+            $fileFormats = FileFormat::whereIn('id', $fileFormatIds)->pluck('name')->toArray();
+            $categories = Category::whereIn('id', $categoryIds)->pluck('name')->toArray();
+            $requestTypes = RequestType::whereIn('id', $requestTypeIds)->pluck('name')->toArray();
+
+            return [
+                'id' => $doc->id,
+                'name' => $doc->name,
+                'entiti_id' => $doc->entiti_id,
+                'workflow_id' => $doc->workflow_id,
+                'work_flow_steps' => $doc->work_flow_steps,
+                'roles' => $doc->roles,
+                'file_formats' => $fileFormats,
+                'categories' => $categories,
+                'request_types' => $requestTypes,
+                'max_count' => $doc->max_count,
+                'expiry_days' => $doc->expiry_days,
+                'description' => $doc->description,
+                'status' => $doc->status,
+                'is_mandatory' => $doc->is_mandatory,
+                'is_enable' => $doc->is_enable,
+                'created_at' => $doc->created_at,
+                'updated_at' => $doc->updated_at,
+            ];
+        });
+
+        Log::info("Documents retrieved for request_type: $id");
 
         return response()->json([
             'status' => 'success',

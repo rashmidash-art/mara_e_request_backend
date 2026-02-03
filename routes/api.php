@@ -30,6 +30,8 @@ use App\Http\Controllers\Auth\PasswordResetContrller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
+
+
 Route::post('admin/login', [LoginController::class, 'login']);
 
 Route::post('password/forgot', [PasswordResetContrller::class, 'sendResetLink']);
@@ -37,6 +39,8 @@ Route::post('password/reset', [PasswordResetContrller::class, 'reset']);
 
 // Need to configure
 Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
+Route::get('request_type/{id}/document', action: [DocumentController::class, 'getDocumentsByRequestType']);
+Route::get('requests/{id}/download-pdf', [CreateRequestController::class, 'downloadRequestPdf']);
 
 Route::middleware('auth:api,entiti-api')->group(function () {
     Route::get('budgets', [BudgetController::class, 'index']);
@@ -143,7 +147,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         // Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
         Route::apiResource('request', controller: CreateRequestController::class);
         // Route::get('/requestDetails', [CreateRequestController::class, 'requestDetailsAll']);
-        Route::get('/requests/actionable', [ CreateRequestController::class,'myActionableRequests',
+        Route::get('/requests/actionable', [CreateRequestController::class, 'myActionableRequests',
         ]);
 
         Route::apiResource('entityReqyestType', controller: EntityRequestTypeController::class);
