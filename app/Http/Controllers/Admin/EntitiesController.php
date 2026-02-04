@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\Document;
 use App\Models\Entiti;
+use App\Models\RequestType;
 use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -265,6 +266,22 @@ class EntitiesController extends Controller
             'status' => 'success',
             'data' => $users,
             'users' => $users,
+        ]);
+    }
+
+    public function getRequestTypeByEntity($entityId)
+    {
+        $requestTypes = RequestType::where('status', 1)
+            ->whereIn('id', function ($q) use ($entityId) {
+                $q->select('request_type_id')
+                    ->from('entity_requests')
+                    ->where('entity_id', $entityId);
+            })
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $requestTypes,
         ]);
     }
 }

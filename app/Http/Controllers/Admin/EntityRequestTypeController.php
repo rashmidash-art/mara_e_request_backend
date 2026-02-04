@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\EntityRequest;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class EntityRequestTypeController extends Controller
 {
@@ -17,20 +19,22 @@ class EntityRequestTypeController extends Controller
 
         $query = EntityRequest::with(['entity', 'category', 'requestType']);
 
-        //  If normal user → force entity_id
-        if ($user instanceof \App\Models\User && $user->user_type === 'user') {
+        if ($request->filled('entity_id')) {
+            $query->where('entity_id', $request->entity_id);
+        } elseif ($user instanceof User && $user->user_type === 'user') {
             $query->where('entity_id', $user->entiti_id);
         }
-        //  Admin / Entity can pass entity_id
-        elseif ($request->filled('entity_id')) {
-            $query->where('entity_id', $request->entity_id);
-        }
-
         if ($request->filled('categore_id')) {
             $query->where('categore_id', $request->categore_id);
         }
 
         $data = $query->get();
+
+        Log::info('Entity filter', [
+            'request_entity' => $request->entity_id,
+            'user_entity' => $user->entiti_id ?? null,
+            'user_type' => $user->user_type ?? null,
+        ]);
 
         return response()->json([
             'status' => 'success',

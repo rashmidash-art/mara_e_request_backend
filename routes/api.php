@@ -30,8 +30,6 @@ use App\Http\Controllers\Auth\PasswordResetContrller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-
-
 Route::post('admin/login', [LoginController::class, 'login']);
 
 Route::post('password/forgot', [PasswordResetContrller::class, 'sendResetLink']);
@@ -119,6 +117,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::apiResource('users', UserController::class);
         Route::apiResource('categore', CategoreController::class);
         Route::get('/categories/{id}/requestTypes', [CategoreController::class, 'getRequestTypeByCat']);
+        Route::get('/entity/{id}/requestTypes', [EntitiesController::class, 'getRequestTypeByEntity']);
 
         Route::apiResource('request_type', RequestTypeController::class);
         Route::apiResource('workflow', WorkFlowController::class);

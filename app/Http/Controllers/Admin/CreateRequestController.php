@@ -204,7 +204,7 @@ class CreateRequestController extends Controller
                 'attachments' => 'nullable|array',
                 'attachments.*.document_id' => 'required|integer',
                 'attachments.*.file' => 'required|file|max:10240',
-                'budget_code' => 'required|exists:budget_codes,id',
+                'budget_code' => 'nullable|exists:budget_codes,id',
                 'behalf_of_buget_code' => 'required_if:behalf_of,1|exists:budget_codes,id',
 
             ]);
@@ -1028,51 +1028,144 @@ class CreateRequestController extends Controller
 
     public function downloadRequestPdf($id)
     {
-        $requestModel = ModelsRequest::with([
-            'userData',
-            'workflowHistory.role',
-            'workflowHistory.assignedUser',
-            'workflowHistory.workflowStep',
-            'requestDetailsDocuments',
-        ])->findOrFail($id);
+        try {
+            // Fetch request with all columns + all needed relationships
+            $requestData = ModelsRequest::with([
+                'userData:id,name',
+                'categoryData:id,name',
+                'departmentData:id,name',
+                'supplierData:id,name',
+                'entityData:id,name',
+                'requestTypeData:id,name',
+                'documents:id,request_id,document_id,document',
 
-        $workflowHistory = collect($requestModel->workflowHistory)->map(function ($w) {
-            return [
-                'stage' => $w->workflowStep?->name ?? 'N/A',
-                'role' => $w->role?->name ?? 'N/A',
-                'assigned_user' => $w->assignedUser?->name ?? 'N/A',
-                'status' => $w->status ?? 'pending',
-                'date' => optional($w->updated_at)->format('Y-m-d') ?? 'N/A',
-            ];
-        })->values()->toArray();
+                'workflowHistory' => function ($q) {
+                    $q->with([
+                        'workflowStep:id,name',
+                        'role:id,name',
+                        'assignedUser:id,name',
+                    ])->orderBy('id', 'asc');
+                },
 
-        $documents = collect($requestModel->requestDetailsDocuments)->map(fn ($doc) => [
-            'document_id' => $doc->document_id,
-            'document' => $doc->document ?? 'N/A',
-        ])->toArray();
+                'requestDetailsDocuments',
+                'supplierRating',
+            ])
+                ->where('id', $id)
+                ->firstOrFail(); // fetch all columns
 
-        $data = [
-            'request_id' => $requestModel->request_id,
-            'description' => $requestModel->description,
-            'status' => $requestModel->status,
-            'requested_by' => [
-                'name' => $requestModel->userData?->name,
-            ],
-            'workflow_history' => $workflowHistory,
-            'documents' => $documents,
-        ];
+            // Transform workflowHistory
+            $workflowTimeline = $requestData->workflowHistory->map(function ($wf) {
+                return [
+                    'stage' => $wf->workflowStep?->name ?? '-',
+                    'role' => $wf->role?->name ?? '-',
+                    'assigned_user' => $wf->assignedUser?->name ?? '-',
+                    'status' => $wf->status,
+                    'date' => $wf->updated_at?->format('Y-m-d') ?? '-',
+                    'remarks' => $wf->remarks ?? '-',
+                ];
+            })->toArray();
 
-        $pdf = Pdf::loadView('pdf.request_details', [
-            'request' => $data,
-        ])->setPaper('a4', 'portrait');
+            $lifecycleTimeline = [];
 
-        return response($pdf->output(), 200)
-            ->header('Content-Type', 'application/pdf')
-            ->header(
-                'Content-Disposition',
-                'attachment; filename="request_'.$requestModel->request_id.'.pdf"'
-            );
+            $doc = $requestData->requestDetailsDocuments;
+
+            if ($doc?->is_po_created) {
+                $lifecycleTimeline[] = [
+                    'label' => 'PO Created',
+                    'date' => $doc->po_date,
+                ];
+            }
+
+            if ($doc?->is_delivery_completed) {
+                $lifecycleTimeline[] = [
+                    'label' => 'Delivery Completed',
+                    'date' => $doc->delivery_completed_date,
+                ];
+            }
+
+            if ($doc?->is_payment_completed) {
+                $lifecycleTimeline[] = [
+                    'label' => 'Payment Completed',
+                    'date' => $doc->payment_completed_date,
+                ];
+            }
+
+            if ($requestData->supplierRating) {
+                $lifecycleTimeline[] = [
+                    'label' => 'Supplier Rated',
+                    'date' => $requestData->supplierRating->created_at?->format('Y-m-d'),
+                ];
+            }
+
+            if ($requestData->status === 'closed') {
+                $lifecycleTimeline[] = [
+                    'label' => 'Closed',
+                    'date' => $requestData->updated_at?->format('Y-m-d'),
+                ];
+            }
+
+            // Generate PDF
+            $pdf = Pdf::loadView('pdf.request_details', [
+                'request' => $requestData,
+                'workflowTimeline' => $workflowTimeline,
+                'lifecycleTimeline' => $lifecycleTimeline,
+            ])->setPaper('A4', 'portrait');
+
+            return $pdf->download('request-'.$requestData->request_id.'.pdf');
+
+        } catch (\Exception $e) {
+            Log::error('PDF Error: '.$e->getMessage());
+            abort(500, 'Failed to generate PDF');
+        }
     }
+
+    // public function downloadRequestPdf($id)
+    // {
+    //     $requestModel = ModelsRequest::with([
+    //         'userData',
+    //         'workflowHistory.role',
+    //         'workflowHistory.assignedUser',
+    //         'workflowHistory.workflowStep',
+    //         'requestDetailsDocuments',
+    //     ])->findOrFail($id);
+
+    //     $workflowHistory = collect($requestModel->workflowHistory)->map(function ($w) {
+    //         return [
+    //             'stage' => $w->workflowStep?->name ?? 'N/A',
+    //             'role' => $w->role?->name ?? 'N/A',
+    //             'assigned_user' => $w->assignedUser?->name ?? 'N/A',
+    //             'status' => $w->status ?? 'pending',
+    //             'date' => optional($w->updated_at)->format('Y-m-d') ?? 'N/A',
+    //         ];
+    //     })->values()->toArray();
+
+    //     $documents = collect($requestModel->requestDetailsDocuments)->map(fn ($doc) => [
+    //         'document_id' => $doc->document_id,
+    //         'document' => $doc->document ?? 'N/A',
+    //     ])->toArray();
+
+    //     $data = [
+    //         'request_id' => $requestModel->request_id,
+    //         'description' => $requestModel->description,
+    //         'status' => $requestModel->status,
+    //         'requested_by' => [
+    //             'name' => $requestModel->userData?->name,
+    //         ],
+    //         'workflow_history' => $workflowHistory,
+    //         'documents' => $documents,
+    //     ];
+
+    //     $pdf = Pdf::loadView('pdf.request_details', [
+    //         'request' => $data,
+    //     ])->setPaper('a4', 'portrait');
+
+    //     return response($pdf->output(), 200)
+    //         ->header('Content-Type', 'application/pdf')
+    //         ->header(
+    //             'Content-Disposition',
+    //             'attachment; filename="request_'.$requestModel->request_id.'.pdf"'
+    //         );
+    // }
 
     // public function requestDetailsAll(Request $request)
     // {

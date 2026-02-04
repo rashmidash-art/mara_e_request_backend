@@ -18,18 +18,19 @@ class RequestTypeController extends Controller
     {
         try {
             $request_types = RequestType::all();
+
             return response()->json(
                 [
                     'status' => 'success',
                     'message' => 'Request Type retrieved successfully',
-                    'data' => $request_types
+                    'data' => $request_types,
                 ]
             );
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve Request Type',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -44,15 +45,15 @@ class RequestTypeController extends Controller
                 [
                     'categori_id' => 'required|integer|exists:categories,id',
                     'request_code' => 'required|string|max:255|unique:request_types,request_code',
-                    'name'          => 'required|string|max:255|unique:request_types,name',
+                    'name' => 'required|string|max:255|unique:request_types,name',
                     'descripton' => 'nullable|string',
-                    'status' => 'required|string|max:255'
+                    'status' => 'required|string|max:255',
                 ],
                 [
                     'categori_id.required' => 'Category ID is required.',
-                    'categori_id.exists'   => 'Selected category does not exist.',
-                    'request_code.unique'  => 'Request code already exists.',
-                    'name.unique'          => 'Request name already exists.',
+                    'categori_id.exists' => 'Selected category does not exist.',
+                    'request_code.unique' => 'Request code already exists.',
+                    'name.unique' => 'Request name already exists.',
                 ]
             );
 
@@ -62,24 +63,26 @@ class RequestTypeController extends Controller
                 'name' => $request->name,
                 'descripton' => $request->descripton,
                 'status' => $request->status,
+                'loa_validation' => $request->loa_validation,
+                'administrative_request' => $request->administrative_request,
             ]);
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Request Type created successfully',
-                'data' => $reqest_type
+                'data' => $reqest_type,
             ], 200);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
-                'message' => $e->errors()
+                'message' => $e->errors(),
             ], 401);
         } catch (QueryException $e) {
 
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve Request Type',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -91,22 +94,23 @@ class RequestTypeController extends Controller
     {
         try {
             $reqest_type = RequestType::find($id);
-            if (!$reqest_type) {
+            if (! $reqest_type) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Request Type not found'
+                    'message' => 'Request Type not found',
                 ], 401);
             }
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Request type details retrieved successfully',
-                'data' => $reqest_type
+                'data' => $reqest_type,
             ], 200);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve Request type details',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -118,58 +122,67 @@ class RequestTypeController extends Controller
     {
         try {
             $requestType = RequestType::find($id);
-            if (!$requestType) {
+            if (! $requestType) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Request type not found'
+                    'message' => 'Request type not found',
                 ], 404);
             }
 
             //  Validation
             $request->validate([
-                'categori_id'   => 'sometimes|required|integer|exists:categories,id',
-                'request_code'  => 'sometimes|required|string|max:255|unique:request_types,request_code,' . $requestType->id,
-                'name'          => 'sometimes|required|string|max:255|unique:request_types,name,' . $requestType->id,
-                'descripton'   => 'nullable|string',
-                'status'        => 'sometimes|required|string|max:255',
+                'categori_id' => 'sometimes|required|integer|exists:categories,id',
+                'request_code' => 'sometimes|required|string|max:255|unique:request_types,request_code,'.$requestType->id,
+                'name' => 'sometimes|required|string|max:255|unique:request_types,name,'.$requestType->id,
+                'descripton' => 'nullable|string',
+                'status' => 'sometimes|required|string|max:255',
             ], [
                 'categori_id.required' => 'Category ID is required.',
-                'categori_id.exists'   => 'Selected category does not exist.',
-                'request_code.unique'  => 'Request code already exists.',
-                'name.unique'          => 'Request name already exists.',
-                'name.required'        => 'Request name is required.',
+                'categori_id.exists' => 'Selected category does not exist.',
+                'request_code.unique' => 'Request code already exists.',
+                'name.unique' => 'Request name already exists.',
+                'name.required' => 'Request name is required.',
                 'request_code.required' => 'Request code is required.',
             ]);
 
             //  Update record
-            $requestType->update($request->only('categori_id', 'request_code', 'name', 'descripton', 'status'));
+            // $requestType->update($request->only('categori_id', 'request_code', 'name', 'descripton', 'status'));
+
+            $reqest_type = RequestType::update([
+                'categori_id' => $request->categori_id,
+                'request_code' => $request->request_code,
+                'name' => $request->name,
+                'descripton' => $request->descripton,
+                'status' => $request->status,
+                'loa_validation' => $request->loa_validation,
+                'administrative_request' => $request->administrative_request,
+            ]);
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Request type updated successfully',
-                'data' => $requestType
+                'data' => $requestType,
             ], 200);
         } catch (ValidationException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => $e->errors(),
-                'error'=>$e->getMessage()
+                'error' => $e->getMessage(),
             ], 401);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to update request type',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         } catch (Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => $e->getMessage(),
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
-
 
     /**
      * Remove the specified resource from storage.
@@ -178,22 +191,23 @@ class RequestTypeController extends Controller
     {
         try {
             $requestType = RequestType::find($id);
-            if (!$requestType) {
+            if (! $requestType) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Request type not found'
+                    'message' => 'Request type not found',
                 ], 401);
             }
             $requestType->delete();
+
             return response()->json([
                 'status' => 'success',
-                'message' => 'Request type deleted successfully'
+                'message' => 'Request type deleted successfully',
             ], 200);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete request type',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
