@@ -17,7 +17,7 @@ class RequestTypeController extends Controller
     public function index()
     {
         try {
-            $request_types = RequestType::all();
+            $request_types = RequestType::orderBy('id', 'desc')->get();
 
             return response()->json(
                 [
@@ -122,6 +122,7 @@ class RequestTypeController extends Controller
     {
         try {
             $requestType = RequestType::find($id);
+
             if (! $requestType) {
                 return response()->json([
                     'status' => 'error',
@@ -129,57 +130,28 @@ class RequestTypeController extends Controller
                 ], 404);
             }
 
-            //  Validation
-            $request->validate([
+            $validated = $request->validate([
                 'categori_id' => 'sometimes|required|integer|exists:categories,id',
                 'request_code' => 'sometimes|required|string|max:255|unique:request_types,request_code,'.$requestType->id,
                 'name' => 'sometimes|required|string|max:255|unique:request_types,name,'.$requestType->id,
                 'descripton' => 'nullable|string',
                 'status' => 'sometimes|required|string|max:255',
-            ], [
-                'categori_id.required' => 'Category ID is required.',
-                'categori_id.exists' => 'Selected category does not exist.',
-                'request_code.unique' => 'Request code already exists.',
-                'name.unique' => 'Request name already exists.',
-                'name.required' => 'Request name is required.',
-                'request_code.required' => 'Request code is required.',
+                'loa_validation' => 'nullable|string|max:255',
+                'administrative_request' => 'nullable|string|max:255',
             ]);
 
-            //  Update record
-            // $requestType->update($request->only('categori_id', 'request_code', 'name', 'descripton', 'status'));
-
-            $reqest_type = RequestType::update([
-                'categori_id' => $request->categori_id,
-                'request_code' => $request->request_code,
-                'name' => $request->name,
-                'descripton' => $request->descripton,
-                'status' => $request->status,
-                'loa_validation' => $request->loa_validation,
-                'administrative_request' => $request->administrative_request,
-            ]);
+            $requestType->update($validated);
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Request type updated successfully',
                 'data' => $requestType,
             ], 200);
-        } catch (ValidationException $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => $e->errors(),
-                'error' => $e->getMessage(),
-            ], 401);
-        } catch (QueryException $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to update request type',
-                'error' => $e->getMessage(),
-            ], 500);
+
         } catch (Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => $e->getMessage(),
-                'error' => $e->getMessage(),
             ], 500);
         }
     }
