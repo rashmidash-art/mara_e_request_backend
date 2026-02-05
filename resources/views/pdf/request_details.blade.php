@@ -210,18 +210,15 @@
         </tbody>
     </table>
 
-    {{-- Subsequent steps: Workflow Approval steps --}}
-    @php
-        // Prepare step titles (you can customize as needed)
+    {{-- @php
         $stepTitles = [
             2 => 'Department Review',
             3 => 'Blockchain Request Review',
-            // Add more steps here if needed
         ];
-    @endphp
+    @endphp --}}
 
     @foreach ($workflowTimeline as $index => $step)
-        <div class="step-title">{{ $index + 2 }}. {{ $stepTitles[$index + 2] ?? 'Approval Step' }}</div>
+        <div class="step-title">{{ $index + 2 }}. {{ $step['step'] }}</div>
         <table>
             <thead>
                 <tr>
@@ -249,16 +246,12 @@
             <tbody>
                 <tr>
                     <td>
-                        <strong>{{ $step['role'] ?? 'N/A' }} Reviewed by</strong><br>
+                        <strong>Reviewed by {{ $step['role'] ?? 'N/A' }}</strong><br>
                         {{ $step['assigned_user'] ?? '-' }}<br>
                         {{ $step['date'] ?? '-' }}
                     </td>
-
-                    <td colspan="2"></td> {{-- Approved mark column --}}
-                    {{-- <td></td> Approved text --}}
-                    <td colspan="2"></td> {{-- Rejected mark column --}}
-                    {{-- <td></td> Rejected text --}}
-
+                    <td colspan="2"></td>
+                    <td colspan="2"></td>
                     <td>
                         {{ $step['remark'] ?? '' }}
                     </td>

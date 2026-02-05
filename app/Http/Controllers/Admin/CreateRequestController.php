@@ -202,7 +202,7 @@ class CreateRequestController extends Controller
                 'business_justification' => 'nullable|string',
                 'status' => 'nullable|in:submitted,draft,deleted,withdraw',
                 'attachments' => 'nullable|array',
-                'attachments.*.document_id' => 'required|integer',
+                'attachments.*.document_id' => 'nullable|integer',
                 'attachments.*.file' => 'required|file|max:10240',
                 'budget_code' => 'nullable|exists:budget_codes,id',
                 'behalf_of_buget_code' => 'required_if:behalf_of,1|exists:budget_codes,id',
@@ -275,7 +275,7 @@ class CreateRequestController extends Controller
 
                     RequestDocument::create([
                         'request_id' => $req->request_id,
-                        'document_id' => $doc['document_id'],
+                        'document_id' => $doc['document_id'] ?? null,
                         'document' => $newFileName,
                     ]);
                 }
@@ -1053,17 +1053,36 @@ class CreateRequestController extends Controller
                 ->where('id', $id)
                 ->firstOrFail(); // fetch all columns
 
-            // Transform workflowHistory
-            $workflowTimeline = $requestData->workflowHistory->map(function ($wf) {
-                return [
-                    'stage' => $wf->workflowStep?->name ?? '-',
-                    'role' => $wf->role?->name ?? '-',
-                    'assigned_user' => $wf->assignedUser?->name ?? '-',
-                    'status' => $wf->status,
-                    'date' => $wf->updated_at?->format('Y-m-d') ?? '-',
-                    'remarks' => $wf->remarks ?? '-',
-                ];
-            })->toArray();
+            $workflowTimeline = $requestData->workflowHistory
+                ->groupBy(fn ($wf) => $wf->workflowStep?->id)
+                ->map(function ($stepGroup) {
+
+                    $actionTaken = $stepGroup->whereIn('status', ['approved', 'rejected']);
+
+                    if ($actionTaken->isNotEmpty()) {
+                        return [
+                            'step' => $stepGroup->first()?->workflowStep?->name,
+                            'role' => $actionTaken->pluck('role.name')->unique()->implode(', '),
+                            'assigned_user' => $actionTaken->pluck('assignedUser.name')->unique()->implode(', '),
+                            'status' => $actionTaken->contains('status', 'approved')
+                                ? 'approved'
+                                : 'rejected',
+                            'date' => optional($actionTaken->max('updated_at'))->format('Y-m-d'),
+                            'remark' => $actionTaken->pluck('remarks')->filter()->implode(' | '),
+                        ];
+                    }
+
+                    return [
+                        'step' => $stepGroup->first()?->workflowStep?->name ?? 'Approval Step',
+                        'role' => $stepGroup->first()?->role?->name ?? 'N/A',
+                        'assigned_user' => 'Pending',
+                        'status' => 'pending',
+                        'date' => '-',
+                        'remark' => '',
+                    ];
+                })
+                ->values()
+                ->toArray();
 
             $lifecycleTimeline = [];
 

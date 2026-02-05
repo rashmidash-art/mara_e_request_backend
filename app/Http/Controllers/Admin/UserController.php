@@ -18,30 +18,73 @@ class UserController extends Controller
     /**
      * Display all users.
      */
+    // public function index(Request $request)
+    // {
+    //     try {
+
+    //         $users = $request->user();
+    //         if ($users instanceof User && $users->user_type == 0) {
+    //             // $departments = Department::all();
+    //             $users = User::with('roles')->where('user_type', 1)->get();
+    //         } elseif ($users instanceof Entiti) {
+    //             $users = User::with('roles')->where('entiti_id', $users->id)->where('user_type', 1)->get();
+    //             // $departments = Department::where('entiti_id', $users->id)->get();
+    //         } elseif ($users instanceof User) {
+    //             $users = User::with('roles')->where('user_type', 1)->get();
+    //             // $departments = Department::all();
+    //             // OR restrict by permissions if needed
+    //             // $departments = Department::whereIn('id', $user->departments()->pluck('department_id'))->get();
+    //         }
+
+    //         // $users = User::with('roles')->where('user_type', 1)->get();
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'Users retrieved successfully',
+    //             'data' => $users,
+    //         ], 200);
+    //     } catch (QueryException $e) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Failed to retrieve users',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
     public function index(Request $request)
     {
         try {
+            $users = $request->user(); // logged-in user
 
-            $users = $request->user();
+            $userList = [];
+
             if ($users instanceof User && $users->user_type == 0) {
-                // $departments = Department::all();
-                $users = User::with('roles')->where('user_type', 1)->get();
-            } elseif ($users instanceof Entiti) {
-                $users = User::with('roles')->where('entiti_id', $users->id)->where('user_type', 1)->get();
-                // $departments = Department::where('entiti_id', $users->id)->get();
-            } elseif ($users instanceof User) {
-                $users = User::with('roles')->where('user_type', 1)->get();
-                // $departments = Department::all();
-                // OR restrict by permissions if needed
-                // $departments = Department::whereIn('id', $user->departments()->pluck('department_id'))->get();
+                // Admin: can see all users
+                $userList = User::with('roles')->where('user_type', 1)->get();
+            } else {
+                // Normal user: only users from their entity
+                $userList = User::with('roles')
+                    ->where('entiti_id', $users->entiti_id)
+                    ->where('user_type', 1)
+                    ->get();
             }
 
-            // $users = User::with('roles')->where('user_type', 1)->get();
+            // Fetch the entity budget for logged-in user
+            $entityBudget = 0;
+            if ($users->entiti_id) {
+                $entity = Entiti::find($users->entiti_id);
+                if ($entity) {
+                    $entityBudget = $entity->budget; // assuming `budget` field exists
+                }
+            }
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Users retrieved successfully',
-                'data' => $users,
+                'data' => $userList,
+                'entityBudget' => $entityBudget,
             ], 200);
+
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',
@@ -50,6 +93,8 @@ class UserController extends Controller
             ], 500);
         }
     }
+
+    // Get logged-in user's entity budget
 
     /**
      * Store a new user.
