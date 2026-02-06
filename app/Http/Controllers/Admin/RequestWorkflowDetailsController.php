@@ -17,7 +17,22 @@ class RequestWorkflowDetailsController extends Controller
      */
     public function index()
     {
-        //
+        $userId = Auth::id();
+
+        $workflowEntries = RequestWorkflowDetails::where(function ($q) use ($userId) {
+            $q->where('assigned_user_id', $userId)
+                ->orWhere('action_taken_by', $userId);
+        })
+            ->with('request')
+            ->orderBy('updated_at', 'desc')
+            ->get();
+
+        $requests = $workflowEntries->pluck('request')->unique('request_id')->values();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $requests,
+        ]);
     }
 
     /**

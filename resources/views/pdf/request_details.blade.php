@@ -163,7 +163,12 @@
     <p><b>Description:</b><br> {!! $request->description === strip_tags($request->description)
         ? nl2br(e($request->description))
         : $request->description !!}</p>
-    {{-- <p><b>B    usiness Justification:</b><br>{!! nl2br(e($request->business_justification)) !!}</p> --}}
+    <p>
+        <b>Business Justification:</b><br>
+        {!! $request->business_justification === strip_tags($request->business_justification)
+            ? nl2br(e($request->business_justification))
+            : $request->business_justification !!}
+    </p>
 
     <hr>
     <h5>Documents Submitted:</h5>

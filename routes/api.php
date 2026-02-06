@@ -39,6 +39,7 @@ Route::post('password/reset', [PasswordResetContrller::class, 'reset']);
 Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
 Route::get('request_type/{id}/document', action: [DocumentController::class, 'getDocumentsByRequestType']);
 Route::get('requests/{id}/download-pdf', [CreateRequestController::class, 'downloadRequestPdf']);
+Route::get('budget-summary', [BudgetController::class, 'budgetSummary']);
 
 Route::middleware('auth:api,entiti-api')->group(function () {
     Route::get('budgets', [BudgetController::class, 'index']);

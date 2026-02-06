@@ -62,10 +62,18 @@ class CreateRequestController extends Controller
             } else {
                 $userId = $auth->id;
 
-                $requests = $query->whereHas('currentWorkflowRole', function ($q) use ($userId) {
-                    $q->where('assigned_user_id', $userId)
-                        ->where('status', 'pending');
-                })->get();
+                $requests = $query
+                    ->where('user', '!=', $userId)
+                    ->whereHas('currentWorkflowRole', function ($q) use ($userId) {
+                        $q->where('assigned_user_id', $userId)
+                            ->where('status', 'pending');
+                    })
+                    ->get();
+
+                // $requests = $query->whereHas('currentWorkflowRole', function ($q) use ($userId) {
+                //     $q->where('assigned_user_id', $userId)
+                //         ->where('status', 'pending');
+                // })->get();
             }
 
             $data = $requests->map(function ($req) {
@@ -291,8 +299,10 @@ class CreateRequestController extends Controller
             }
 
             // ------------------------- FETCH WORKFLOW ------------------------- //
-            $workflow = WorkFlow::where('categori_id', $req->category)
+            $workflow = WorkFlow::where('entity_id', $req->entiti)
+                ->where('categori_id', $req->category)
                 ->where('request_type_id', $req->request_type)
+                ->orderBy('id', 'desc')
                 ->first();
 
             if (! $workflow) {
@@ -302,9 +312,8 @@ class CreateRequestController extends Controller
                 ], 422);
             }
 
-            // ------------------------- WORKFLOW DETAILS ------------------------- //
             $steps = WorkflowStep::where('workflow_id', $workflow->id)
-                ->orderBy('order_id', 'asc')
+                ->orderBy('order_id')
                 ->get();
 
             foreach ($steps as $step) {
@@ -315,31 +324,30 @@ class CreateRequestController extends Controller
 
                 foreach ($roleAssigns as $roleAssign) {
 
-                    $approvalLogic = strtolower($roleAssign->approval_logic);
                     $users = collect();
 
-                    // -------- SPECIFIC USER LOGIC -------- //
                     if ($roleAssign->specific_user == 1 && $roleAssign->user_id) {
-
                         $userIds = json_decode($roleAssign->user_id, true);
                         $userIds = is_array($userIds) ? $userIds : [$roleAssign->user_id];
 
                         $users = User::whereIn('id', $userIds)->get();
-
                     } else {
-                        // -------- ROLE BASED USERS -------- //
                         $users = User::whereHas('roles', function ($q) use ($roleAssign) {
                             $q->where('roles.id', $roleAssign->role_id);
                         })->get();
                     }
 
                     if ($users->isEmpty()) {
+                        Log::warning('Workflow skipped: no users', [
+                            'workflow_id' => $workflow->id,
+                            'step_id' => $step->id,
+                            'role_id' => $roleAssign->role_id,
+                        ]);
+
                         continue;
                     }
 
-                    // -------- AND LOGIC -------- //
-                    if ($approvalLogic === 'and') {
-
+                    if (strtolower($roleAssign->approval_logic) === 'and') {
                         foreach ($users as $user) {
                             RequestWorkflowDetails::create([
                                 'request_id' => $req->request_id,
@@ -351,9 +359,7 @@ class CreateRequestController extends Controller
                                 'is_sendback' => 0,
                             ]);
                         }
-
                     } else {
-                        // -------- SINGLE / OR LOGIC -------- //
                         RequestWorkflowDetails::create([
                             'request_id' => $req->request_id,
                             'workflow_id' => $workflow->id,
