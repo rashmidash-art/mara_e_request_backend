@@ -11,9 +11,9 @@ class Document extends Model
     protected $fillable = [
         'name',
         'entiti_id',
-        'work_flow_steps',
-        'workflow_id',
-        'roles',
+        // 'work_flow_steps',
+        // 'workflow_id',
+        // 'roles',
         'file_formats',
         'categories',
         'request_types',

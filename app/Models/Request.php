@@ -51,6 +51,11 @@ class Request extends Model
             ->orderBy('workflow_step_id', 'asc');
     }
 
+    public function currentWorkflowStep()
+    {
+        return $this->belongsTo(WorkflowStep::class, 'workflow_step_id');
+    }
+
     public function pendingWorkflowRoles()
     {
         return $this->hasMany(RequestWorkflowDetails::class, 'request_id', 'request_id')
@@ -102,7 +107,6 @@ class Request extends Model
     {
         return $this->hasMany(RequestDocument::class, 'request_id', 'request_id');
     }
-    
 
     public function workflowDetails()
     {

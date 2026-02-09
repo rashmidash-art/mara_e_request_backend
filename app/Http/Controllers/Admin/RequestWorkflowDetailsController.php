@@ -3,11 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Request;
 use App\Models\Request as ModelsRequest;
 use App\Models\RequestWorkflowDetails;
 use App\Models\User;
 use App\Models\WorkflowRoleAssign;
-use Illuminate\Http\Request;
+// use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class RequestWorkflowDetailsController extends Controller
@@ -16,24 +17,92 @@ class RequestWorkflowDetailsController extends Controller
      * Display a listing of the resource.
      */
     public function index()
-    {
-        $userId = Auth::id();
+{
+    $userId = Auth::id();
 
-        $workflowEntries = RequestWorkflowDetails::where(function ($q) use ($userId) {
-            $q->where('assigned_user_id', $userId)
-                ->orWhere('action_taken_by', $userId);
-        })
-            ->with('request')
-            ->orderBy('updated_at', 'desc')
-            ->get();
+    $requests = Request::whereHas('workflowUsers', function ($q) use ($userId) {
+        $q->where('action_taken_by', $userId);
+    })
+    ->with([
+        'userData',
+        'departmentData',
 
-        $requests = $workflowEntries->pluck('request')->unique('request_id')->values();
+        // Load ONLY last action taken by this user
+        'workflowUsers' => function ($q) use ($userId) {
+            $q->where('action_taken_by', $userId)
+              ->latest('updated_at')
+              ->limit(1)
+              ->with(['assignedUser', 'role', 'workflowStep']);
+        },
 
-        return response()->json([
-            'status' => 'success',
-            'data' => $requests,
-        ]);
-    }
+        'requestDetailsDocuments',
+        'supplierData',
+        'requestTypeData',
+        'categoryData',
+    ])
+    ->orderBy('updated_at', 'desc')
+    ->get();
+
+    $data = $requests->map(function ($request) {
+
+        // Only one row now (last action by user)
+        $lastActionByUser = $request->workflowUsers->first();
+
+        return [
+            'id' => $request->request_id,
+            'title' => $request->title,
+            'description' => $request->description,
+            'amount' => $request->amount,
+            'type' => $request->requestTypeData->name ?? null,
+
+            'requestor' => [
+                'id' => $request->userData->id ?? null,
+                'name' => $request->userData->name ?? null,
+                'email' => $request->userData->email ?? null,
+                'department' => $request->departmentData->name ?? null,
+            ],
+
+            // Status strictly based on login user's LAST action
+            'status' => $lastActionByUser->status ?? 'pending',
+
+            'last_action_by_user' => $lastActionByUser ? [
+                'workflow_id' => $lastActionByUser->workflow_id,
+                'workflow_step_id' => $lastActionByUser->workflow_step_id,
+                'workflow_role_id' => $lastActionByUser->workflow_role_id,
+                'assigned_user_id' => $lastActionByUser->assigned_user_id,
+                'action_taken_by' => $lastActionByUser->action_taken_by,
+                'remark' => $lastActionByUser->remark,
+                'status' => $lastActionByUser->status,
+                'is_sendback' => $lastActionByUser->is_sendback,
+                'sendback_remark' => $lastActionByUser->sendback_remark,
+                'created_at' => $lastActionByUser->created_at,
+                'updated_at' => $lastActionByUser->updated_at,
+            ] : null,
+
+            'is_closed' => $request->status === 'closed',
+            'category' => $request->categoryData->name ?? null,
+            'workflow' => $lastActionByUser?->workflowStep->name ?? null,
+            'supplier_name' => $request->supplierData->name ?? null,
+            'created_at' => $request->created_at,
+            'updated_at' => $request->updated_at,
+        ];
+    });
+
+    // Counts based ONLY on last action by login user
+    $counts = [
+        'total' => $data->count(),
+        'accepted' => $data->where('status', 'approved')->count(),
+        'rejected' => $data->where('status', 'rejected')->count(),
+        'pending' => $data->where('status', 'pending')->count(),
+    ];
+
+    return response()->json([
+        'status' => 'success',
+        'data' => $data,
+        'counts' => $counts,
+    ]);
+}
+
 
     /**
      * Store a newly created resource in storage.

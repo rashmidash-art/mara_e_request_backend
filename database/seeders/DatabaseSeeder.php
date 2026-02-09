@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -29,6 +28,8 @@ class DatabaseSeeder extends Seeder
         // $this->call(AdminloginSeeder::class);
         // $this->call(BudgetCodePermissionSeeder::class);
         // $this->call(EntityRequestTypePermissionSeeder::class);
-        $this->call(GetRequestTypeByCategory::class);
+        // $this->call(GetRequestTypeByCategory::class);
+        $this->call(RollbackRequestWorkflowSeeder::class);
+        $this->call(RequestWorkflowDetailsSeeder::class);
     }
 }

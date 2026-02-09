@@ -100,7 +100,7 @@ class DocumentController extends Controller
             $request->validate([
                 'name' => 'required|string|max:255|unique:documents,name',
                 'entiti_id' => 'nullable|integer',
-                'workflow_id' => 'required|integer|exists:work_flows,id',
+                // 'workflow_id' => 'required|integer|exists:work_flows,id',
                 'roles' => 'nullable',
                 'file_formats' => 'required',
                 'categories' => 'nullable',
@@ -123,7 +123,7 @@ class DocumentController extends Controller
                         ? array_values(array_filter(explode(',', $val)))
                         : []);
 
-            $roles = $normalize($request->roles);
+            // $roles = $normalize($request->roles);
             $categories = $normalize($request->categories);
             $requestTypes = $normalize($request->request_types);
             $fileFormatIds = $normalize($request->file_formats);
@@ -136,25 +136,22 @@ class DocumentController extends Controller
             }
 
             // ---------------- WORKFLOW STEPS ----------------
-            $steps = DB::table('workflow_steps')
-                ->where('workflow_id', $request->workflow_id)
-                ->pluck('id')
-                ->toArray();
+            // $steps = DB::table('workflow_steps')
+            //     ->where('workflow_id', $request->workflow_id)
+            //     ->pluck('id')
+            //     ->toArray();
 
-            if (empty($steps)) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'No steps found for the selected workflow',
-                ], 404);
-            }
+            // if (empty($steps)) {
+            //     return response()->json([
+            //         'status' => 'error',
+            //         'message' => 'No steps found for the selected workflow',
+            //     ], 404);
+            // }
 
             // ---------------- CREATE DOCUMENT ----------------
             $document = Document::create([
                 'name' => $request->name,
                 'entiti_id' => $request->entiti_id,
-                'workflow_id' => $request->workflow_id,
-                'work_flow_steps' => implode(',', $steps),
-                'roles' => implode(',', $roles),
                 'file_formats' => implode(',', $fileFormatIds),
                 'categories' => implode(',', $categories),
                 'request_types' => implode(',', $requestTypes),
@@ -200,43 +197,39 @@ class DocumentController extends Controller
 
     public function show($id)
     {
-        Log::info("DocumentController@show called with ID: $id");
+        $document = Document::find($id);
 
-        try {
-            $document = Document::find($id);
-
-            if (! $document) {
-                Log::warning("Document not found: ID $id");
-
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Document not found',
-                ], 404);
-            }
-
-            // Convert comma-separated fields to arrays
-            $document->work_flow_steps = $document->work_flow_steps ? explode(',', $document->work_flow_steps) : [];
-            $document->roles = $document->roles ? explode(',', $document->roles) : [];
-            $document->file_formats = $document->file_formats ? explode(',', $document->file_formats) : [];
-            $document->categories = $document->categories ? explode(',', $document->categories) : [];
-            Log::info('Document retrieved successfully', ['id' => $id]);
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Document retrieved successfully',
-                'data' => $document,
-            ], 200);
-        } catch (\Exception $e) {
-            Log::error("Error in show($id): ".$e->getMessage(), [
-                'trace' => $e->getTraceAsString(),
-            ]);
-
+        if (! $document) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to fetch document',
-                'error' => $e->getMessage(),
-            ], 500);
+                'message' => 'Document not found',
+            ], 404);
         }
+
+        $document->file_formats = $document->file_formats
+            ? explode(',', $document->file_formats)
+            : [];
+
+        $document->categories = $document->categories
+            ? explode(',', $document->categories)
+            : [];
+
+        $document->request_types = $document->request_types
+            ? explode(',', $document->request_types)
+            : [];
+
+        $document->roles = $document->roles
+            ? explode(',', $document->roles)
+            : [];
+
+        $document->work_flow_steps = $document->work_flow_steps
+            ? explode(',', $document->work_flow_steps)
+            : [];
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $document,
+        ]);
     }
 
     public function update(Request $request, $id)
@@ -259,8 +252,8 @@ class DocumentController extends Controller
             $request->validate([
                 'name' => 'required|string|max:255|unique:documents,name,'.$id,
                 'entiti_id' => 'nullable|integer',
-                'workflow_id' => 'required|integer|exists:work_flows,id',
-                'roles' => 'nullable',
+                // 'workflow_id' => 'required|integer|exists:work_flows,id',
+                // 'roles' => 'nullable',
                 'file_formats' => 'nullable',
                 'categories' => 'nullable',
                 'request_types' => 'nullable',
@@ -297,24 +290,24 @@ class DocumentController extends Controller
                 ], 422);
             }
             // Get workflow steps
-            $steps = DB::table('workflow_steps')
-                ->where('workflow_id', $request->workflow_id)
-                ->pluck('id')
-                ->toArray();
+            // $steps = DB::table('workflow_steps')
+            //     ->where('workflow_id', $request->workflow_id)
+            //     ->pluck('id')
+            //     ->toArray();
 
-            if (empty($steps)) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'No steps found for the selected workflow',
-                ], 404);
-            }
+            // if (empty($steps)) {
+            //     return response()->json([
+            //         'status' => 'error',
+            //         'message' => 'No steps found for the selected workflow',
+            //     ], 404);
+            // }
 
             // ---------- UPDATE ----------
             $document->update([
                 'name' => $request->name,
                 'entiti_id' => $request->entiti_id,
                 'workflow_id' => $request->workflow_id,
-                'work_flow_steps' => implode(',', $steps),
+                // 'work_flow_steps' => implode(',', $steps),
                 'roles' => implode(',', $roles),
                 'file_formats' => implode(',', $fileFormatIds),
                 // 'file_formats' => $fileFormatIds ? implode(',', $fileFormatIds) : null,
@@ -426,9 +419,9 @@ class DocumentController extends Controller
                 'id' => $doc->id,
                 'name' => $doc->name,
                 'entiti_id' => $doc->entiti_id,
-                'workflow_id' => $doc->workflow_id,
-                'work_flow_steps' => $doc->work_flow_steps,
-                'roles' => $doc->roles,
+                // 'workflow_id' => $doc->workflow_id,
+                // 'work_flow_steps' => $doc->work_flow_steps,
+                // 'roles' => $doc->roles,
                 'file_formats' => $fileFormats,
                 'categories' => $categories,
                 'max_count' => $doc->max_count,
@@ -468,9 +461,9 @@ class DocumentController extends Controller
                 'id' => $doc->id,
                 'name' => $doc->name,
                 'entiti_id' => $doc->entiti_id,
-                'workflow_id' => $doc->workflow_id,
-                'work_flow_steps' => $doc->work_flow_steps,
-                'roles' => $doc->roles,
+                // 'workflow_id' => $doc->workflow_id,
+                // 'work_flow_steps' => $doc->work_flow_steps,
+                // 'roles' => $doc->roles,
                 'file_formats' => $fileFormats,
                 'categories' => $categories,
                 'request_types' => $requestTypes,
