@@ -121,6 +121,8 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::get('/entity/{id}/requestTypes', [EntitiesController::class, 'getRequestTypeByEntity']);
 
         Route::apiResource('request_type', RequestTypeController::class);
+        Route::get('/request-type/generate-code', [RequestTypeController::class, 'generateCode']);
+
         Route::apiResource('workflow', WorkFlowController::class);
         Route::get('entity/{id}/workflow', action: [WorkFlowController::class, 'getWorkflowByEntity']);
 

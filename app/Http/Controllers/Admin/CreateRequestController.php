@@ -1035,7 +1035,6 @@ class CreateRequestController extends Controller
     public function downloadRequestPdf($id)
     {
         try {
-            // Fetch request with all columns + all needed relationships
             $requestData = ModelsRequest::with([
                 'userData:id,name',
                 'categoryData:id,name',
@@ -1056,8 +1055,11 @@ class CreateRequestController extends Controller
                 'requestDetailsDocuments',
                 'supplierRating',
             ])
-                ->where('id', $id)
-                ->firstOrFail(); // fetch all columns
+                ->where(function ($q) use ($id) {
+                    $q->where('id', $id)            // numeric DB id
+                        ->orWhere('request_id', $id); // REQ-2026-071
+                })
+                ->firstOrFail();
 
             $workflowTimeline = $requestData->workflowHistory
                 ->groupBy(fn ($wf) => $wf->workflowStep?->id)

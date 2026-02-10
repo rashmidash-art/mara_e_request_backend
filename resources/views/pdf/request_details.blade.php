@@ -137,7 +137,7 @@
                  ">
                     {{ $request->userData?->name }}
                     | {{ $request->request_id }}
-                    | {{ $request->created_at?->format('Y-m-d') }}
+                    | {{ $request->created_at?->format('Y-m-d h:i') }}
                 </div>
             @endfor
         @endfor
@@ -163,12 +163,11 @@
     <p><b>Description:</b><br> {!! $request->description === strip_tags($request->description)
         ? nl2br(e($request->description))
         : $request->description !!}</p>
-    <p>
-        <b>Business Justification:</b><br>
-        {!! $request->business_justification === strip_tags($request->business_justification)
-            ? nl2br(e($request->business_justification))
-            : $request->business_justification !!}
-    </p>
+
+    <p><b>Business Justification:</b><br> {!! $request->business_justification === strip_tags($request->business_justification)
+        ? nl2br(e($request->business_justification))
+        : $request->business_justification !!}</p>
+    {{-- <p><b>B    usiness Justification:</b><br>{!! nl2br(e($request->business_justification)) !!}</p> --}}
 
     <hr>
     <h5>Documents Submitted:</h5>
@@ -215,15 +214,18 @@
         </tbody>
     </table>
 
-    {{-- @php
+    {{-- Subsequent steps: Workflow Approval steps --}}
+    @php
+        // Prepare step titles (you can customize as needed)
         $stepTitles = [
             2 => 'Department Review',
             3 => 'Blockchain Request Review',
+            // Add more steps here if needed
         ];
-    @endphp --}}
+    @endphp
 
     @foreach ($workflowTimeline as $index => $step)
-        <div class="step-title">{{ $index + 2 }}. {{ $step['step'] }}</div>
+        <div class="step-title">{{ $index + 2 }}. {{ $stepTitles[$index + 2] ?? 'Approval Step' }}</div>
         <table>
             <thead>
                 <tr>
@@ -251,12 +253,16 @@
             <tbody>
                 <tr>
                     <td>
-                        <strong>Reviewed by {{ $step['role'] ?? 'N/A' }}</strong><br>
+                        <strong>{{ $step['role'] ?? 'N/A' }} Reviewed by</strong><br>
                         {{ $step['assigned_user'] ?? '-' }}<br>
                         {{ $step['date'] ?? '-' }}
                     </td>
-                    <td colspan="2"></td>
-                    <td colspan="2"></td>
+
+                    <td colspan="2"></td> {{-- Approved mark column --}}
+                    {{-- <td></td> Approved text --}}
+                    <td colspan="2"></td> {{-- Rejected mark column --}}
+                    {{-- <td></td> Rejected text --}}
+
                     <td>
                         {{ $step['remark'] ?? '' }}
                     </td>

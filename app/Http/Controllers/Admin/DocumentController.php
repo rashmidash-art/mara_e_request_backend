@@ -111,7 +111,7 @@ class DocumentController extends Controller
                 'description' => 'required|string',
                 'status' => 'required|string|max:255',
                 'is_mandatory' => 'required|integer|in:0,1',
-                'is_enable' => 'required|integer|in:0,1',
+                // 'is_enable' => 'required|integer|in:0,1',
             ]);
 
             Log::info('Validation passed for store');
@@ -161,7 +161,7 @@ class DocumentController extends Controller
                 'description' => $request->description,
                 'status' => $request->status,
                 'is_mandatory' => $request->is_mandatory,
-                'is_enable' => $request->is_enable,
+                // 'is_enable' => $request->is_enable,
             ]);
 
             Log::info('Document created successfully', ['id' => $document->id]);
@@ -263,7 +263,7 @@ class DocumentController extends Controller
                 'description' => 'required|string',
                 'status' => 'required|string|max:255',
                 'is_mandatory' => 'required|integer',
-                'is_enable' => 'required|integer',
+                // 'is_enable' => 'required|integer',
             ]);
 
             Log::info("Validation passed for update($id)");
@@ -319,7 +319,7 @@ class DocumentController extends Controller
                 'description' => $request->description,
                 'status' => $request->status,
                 'is_mandatory' => $request->is_mandatory,
-                'is_enable' => $request->is_enable,
+                // 'is_enable' => $request->is_enable,
             ]);
 
             Log::info('Document updated successfully', ['id' => $id]);

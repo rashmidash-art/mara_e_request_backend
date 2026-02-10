@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use App\Models\RequestType;
 use Exception;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Str;
 
 class RequestTypeController extends Controller
 {
@@ -85,6 +87,30 @@ class RequestTypeController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function generateCode(Request $request)
+    {
+        $request->validate([
+            'categori_id' => 'required|exists:categories,id',
+            'name' => 'required|string',
+        ]);
+
+        $category = Category::findOrFail($request->categori_id);
+
+        // First 2 letters
+        $catCode = strtoupper(Str::substr($category->name, 0, 2));
+        $reqCode = strtoupper(Str::substr($request->name, 0, 2));
+
+        // Count existing request types in this category
+        $count = RequestType::where('categori_id', $category->id)->count() + 1;
+
+        $number = str_pad($count, 3, '0', STR_PAD_LEFT);
+
+        return response()->json([
+            'status' => 'success',
+            'request_code' => "{$catCode}-{$reqCode}-{$number}",
+        ]);
     }
 
     /**
