@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class RequestWorkflowDetails extends Model
 {
     use HasFactory;
-    protected $fillable = ['request_id', 'workflow_id', 'workflow_step_id', 'workflow_role_id', 'action_taken_by', 'remark', 'status', 'is_sendback', 'sendback_remark', 'assigned_user_id'];
+    protected $fillable = ['request_id', 'workflow_id', 'workflow_step_id', 'workflow_role_id','approval_logic','action_taken_by', 'remark', 'status', 'is_sendback', 'sendback_remark', 'assigned_user_id'];
 
 
     /** Request header info */

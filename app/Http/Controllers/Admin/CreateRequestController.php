@@ -60,13 +60,32 @@ class CreateRequestController extends Controller
             } elseif ($isEntityLogin) {
                 $requests = $query->where('entiti', $auth->id)->get();
             } else {
+                // $userId = $auth->id;
+
+                // $requests = $query
+                //     // ->where('user', '!=', $userId)
+                //     ->whereHas('currentWorkflowRole', function ($q) use ($userId) {
+                //         $q->where('assigned_user_id', $userId)
+                //             ->where('status', 'pending');
+                //     })
+                //     ->get();
+
                 $userId = $auth->id;
 
                 $requests = $query
-                    ->where('user', '!=', $userId)
-                    ->whereHas('currentWorkflowRole', function ($q) use ($userId) {
+                //   ->where('status', 'pending')
+                    ->whereHas('workflowDetails', function ($q) use ($userId) {
+
                         $q->where('assigned_user_id', $userId)
-                            ->where('status', 'pending');
+                            ->whereRaw('workflow_step_id = (
+                SELECT workflow_step_id
+                FROM request_workflow_details rwd
+                WHERE rwd.request_id = request_workflow_details.request_id
+                  AND rwd.status = "pending"
+                ORDER BY workflow_step_id ASC
+                LIMIT 1
+          )');
+
                     })
                     ->get();
 
@@ -356,6 +375,7 @@ class CreateRequestController extends Controller
                                 'workflow_role_id' => $roleAssign->role_id,
                                 'assigned_user_id' => $user->id,
                                 'status' => 'pending',
+                                'approval_logic' => strtolower($roleAssign->approval_logic),
                                 'is_sendback' => 0,
                             ]);
                         }
@@ -367,6 +387,7 @@ class CreateRequestController extends Controller
                             'workflow_role_id' => $roleAssign->role_id,
                             'assigned_user_id' => $users->first()->id,
                             'status' => 'pending',
+                            'approval_logic' => strtolower($roleAssign->approval_logic),
                             'is_sendback' => 0,
                         ]);
                     }
@@ -967,6 +988,7 @@ class CreateRequestController extends Controller
                     'amount' => (float) $req->amount,
                     'priority' => $req->priority,
                     'description' => $req->description,
+                    'business_justification' => $req->business_justification,
                     'status' => $req->status,
                     'final_status' => $finalStatus['final_status'],
                     'pending_by' => $finalStatus['pending_by'],

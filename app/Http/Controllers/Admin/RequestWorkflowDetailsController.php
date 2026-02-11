@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Request;
-use App\Models\Request as ModelsRequest;
+// use App\Models\Request;
+// use App\Models\Request as ModelsRequest;
 use App\Models\RequestWorkflowDetails;
 use App\Models\User;
 use App\Models\WorkflowRoleAssign;
-// use Illuminate\Http\Request;
+use Illuminate\Http\Request;
+use App\Models\Request as ModelsRequest;
 use Illuminate\Support\Facades\Auth;
 
 class RequestWorkflowDetailsController extends Controller
@@ -17,92 +18,91 @@ class RequestWorkflowDetailsController extends Controller
      * Display a listing of the resource.
      */
     public function index()
-{
-    $userId = Auth::id();
+    {
+        $userId = Auth::id();
 
-    $requests = Request::whereHas('workflowUsers', function ($q) use ($userId) {
-        $q->where('action_taken_by', $userId);
-    })
-    ->with([
-        'userData',
-        'departmentData',
+        $requests = Request::whereHas('workflowUsers', function ($q) use ($userId) {
+            $q->where('action_taken_by', $userId);
+        })
+            ->with([
+                'userData',
+                'departmentData',
 
-        // Load ONLY last action taken by this user
-        'workflowUsers' => function ($q) use ($userId) {
-            $q->where('action_taken_by', $userId)
-              ->latest('updated_at')
-              ->limit(1)
-              ->with(['assignedUser', 'role', 'workflowStep']);
-        },
+                // Load ONLY last action taken by this user
+                'workflowUsers' => function ($q) use ($userId) {
+                    $q->where('action_taken_by', $userId)
+                        ->latest('updated_at')
+                        ->limit(1)
+                        ->with(['assignedUser', 'role', 'workflowStep']);
+                },
 
-        'requestDetailsDocuments',
-        'supplierData',
-        'requestTypeData',
-        'categoryData',
-    ])
-    ->orderBy('updated_at', 'desc')
-    ->get();
+                'requestDetailsDocuments',
+                'supplierData',
+                'requestTypeData',
+                'categoryData',
+            ])
+            ->orderBy('updated_at', 'desc')
+            ->get();
 
-    $data = $requests->map(function ($request) {
+        $data = $requests->map(function ($request) {
 
-        // Only one row now (last action by user)
-        $lastActionByUser = $request->workflowUsers->first();
+            // Only one row now (last action by user)
+            $lastActionByUser = $request->workflowUsers->first();
 
-        return [
-            'id' => $request->request_id,
-            'title' => $request->title,
-            'description' => $request->description,
-            'amount' => $request->amount,
-            'type' => $request->requestTypeData->name ?? null,
+            return [
+                'id' => $request->request_id,
+                'title' => $request->title,
+                'description' => $request->description,
+                'amount' => $request->amount,
+                'type' => $request->requestTypeData->name ?? null,
 
-            'requestor' => [
-                'id' => $request->userData->id ?? null,
-                'name' => $request->userData->name ?? null,
-                'email' => $request->userData->email ?? null,
-                'department' => $request->departmentData->name ?? null,
-            ],
+                'requestor' => [
+                    'id' => $request->userData->id ?? null,
+                    'name' => $request->userData->name ?? null,
+                    'email' => $request->userData->email ?? null,
+                    'department' => $request->departmentData->name ?? null,
+                ],
 
-            // Status strictly based on login user's LAST action
-            'status' => $lastActionByUser->status ?? 'pending',
+                // Status strictly based on login user's LAST action
+                'status' => $lastActionByUser->status ?? 'pending',
 
-            'last_action_by_user' => $lastActionByUser ? [
-                'workflow_id' => $lastActionByUser->workflow_id,
-                'workflow_step_id' => $lastActionByUser->workflow_step_id,
-                'workflow_role_id' => $lastActionByUser->workflow_role_id,
-                'assigned_user_id' => $lastActionByUser->assigned_user_id,
-                'action_taken_by' => $lastActionByUser->action_taken_by,
-                'remark' => $lastActionByUser->remark,
-                'status' => $lastActionByUser->status,
-                'is_sendback' => $lastActionByUser->is_sendback,
-                'sendback_remark' => $lastActionByUser->sendback_remark,
-                'created_at' => $lastActionByUser->created_at,
-                'updated_at' => $lastActionByUser->updated_at,
-            ] : null,
+                'last_action_by_user' => $lastActionByUser ? [
+                    'workflow_id' => $lastActionByUser->workflow_id,
+                    'workflow_step_id' => $lastActionByUser->workflow_step_id,
+                    'workflow_role_id' => $lastActionByUser->workflow_role_id,
+                    'assigned_user_id' => $lastActionByUser->assigned_user_id,
+                    'action_taken_by' => $lastActionByUser->action_taken_by,
+                    'remark' => $lastActionByUser->remark,
+                    'status' => $lastActionByUser->status,
+                    'is_sendback' => $lastActionByUser->is_sendback,
+                    'sendback_remark' => $lastActionByUser->sendback_remark,
+                    'created_at' => $lastActionByUser->created_at,
+                    'updated_at' => $lastActionByUser->updated_at,
+                ] : null,
 
-            'is_closed' => $request->status === 'closed',
-            'category' => $request->categoryData->name ?? null,
-            'workflow' => $lastActionByUser?->workflowStep->name ?? null,
-            'supplier_name' => $request->supplierData->name ?? null,
-            'created_at' => $request->created_at,
-            'updated_at' => $request->updated_at,
+                'is_closed' => $request->status === 'closed',
+                'category' => $request->categoryData->name ?? null,
+                'workflow' => $lastActionByUser?->workflowStep->name ?? null,
+                'supplier_name' => $request->supplierData->name ?? null,
+                'created_at' => $request->created_at,
+                'updated_at' => $request->updated_at,
+            ];
+        });
+
+        // Counts based ONLY on last action by login user
+        $counts = [
+            'total' => $data->count(),
+            'accepted' => $data->where('status', 'approved')->count(),
+            'rejected' => $data->where('status', 'rejected')->count(),
+            'pending' => $data->where('status', 'pending')->count(),
         ];
-    });
 
-    // Counts based ONLY on last action by login user
-    $counts = [
-        'total' => $data->count(),
-        'accepted' => $data->where('status', 'approved')->count(),
-        'rejected' => $data->where('status', 'rejected')->count(),
-        'pending' => $data->where('status', 'pending')->count(),
-    ];
-
-    return response()->json([
-        'status' => 'success',
-        'data' => $data,
-        'counts' => $counts,
-    ]);
-}
-
+        return response()->json([
+            'status' => 'success',
+            'data' => $data,
+            'counts' => $counts,
+        ]);
+    }
 
     /**
      * Store a newly created resource in storage.
@@ -158,12 +158,13 @@ class RequestWorkflowDetailsController extends Controller
             ], 403);
         }
 
+        $logic = strtolower($current->approval_logic); // single / or / and
+
         // ------------------ APPROVE ------------------ //
         if ($request->action === 'approve') {
 
             $requestData = ModelsRequest::where('request_id', $request_id)->first();
 
-            // Check if request amount exceeds user's LOA
             if ($requestData->amount > $user->loa) {
                 return response()->json([
                     'status' => 'error',
@@ -171,27 +172,60 @@ class RequestWorkflowDetailsController extends Controller
                 ], 403);
             }
 
-            $current->update([
-                'status' => 'approved',
-                'remark' => $request->remark,
-                'is_sendback' => 0,
-                'sendback_remark' => null,
-                'action_taken_by' => $user->id,
-            ]);
+            if ($logic === 'single') {
+                // Single user approval
+                $current->update([
+                    'status' => 'approved',
+                    'remark' => $request->remark,
+                    'action_taken_by' => $user->id,
+                ]);
+            } elseif ($logic === 'or') {
+                // OR logic: any user approval counts for all
+                RequestWorkflowDetails::where('request_id', $request_id)
+                    ->where('workflow_step_id', $current->workflow_step_id)
+                    ->update([
+                        'status' => 'approved',
+                        'remark' => $request->remark,
+                        'action_taken_by' => $user->id,
+                    ]);
+            } elseif ($logic === 'and') {
+                // AND logic: approve only current user
+                $current->update([
+                    'status' => 'approved',
+                    'remark' => $request->remark,
+                    'action_taken_by' => $user->id,
+                ]);
 
-            // Move to next step if exists
+                // Check if all assigned users have approved
+                $remaining = RequestWorkflowDetails::where('request_id', $request_id)
+                    ->where('workflow_step_id', $current->workflow_step_id)
+                    ->where('status', 'pending')
+                    ->count();
+
+                if ($remaining > 0) {
+                    return response()->json([
+                        'status' => 'success',
+                        'message' => 'Approval recorded. Waiting for other approvers.',
+                    ]);
+                }
+            }
+
+            // ------------------ MOVE TO NEXT STEP ------------------ //
             $nextStep = RequestWorkflowDetails::where('request_id', $request_id)
                 ->where('workflow_step_id', '>', $current->workflow_step_id)
                 ->orderBy('workflow_step_id')
                 ->first();
 
             if ($nextStep) {
-                $nextStep->update([
-                    'status' => 'pending',
-                ]);
+                RequestWorkflowDetails::where('request_id', $request_id)
+                    ->where('workflow_step_id', $nextStep->workflow_step_id)
+                    ->update(['status' => 'pending']);
+            } else {
+                // No next step → fully approved
+                ModelsRequest::where('request_id', $request_id)
+                    ->update(['status' => 'approved']);
             }
 
-            // Sync request status
             $this->syncRequestStatus($request_id);
 
             return response()->json([
@@ -202,22 +236,35 @@ class RequestWorkflowDetailsController extends Controller
 
         // ------------------ REJECT ------------------ //
         if ($request->action === 'reject') {
-            $current->update([
-                'status' => 'rejected',
-                'remark' => $request->remark,
-                'is_sendback' => 0,
-                'sendback_remark' => null,
-                'action_taken_by' => $user->id,
-            ]);
+
+            if ($logic === 'or' || $logic === 'single') {
+                // Reject all users in this step
+                RequestWorkflowDetails::where('request_id', $request_id)
+                    ->where('workflow_step_id', $current->workflow_step_id)
+                    ->update([
+                        'status' => 'rejected',
+                        'remark' => $request->remark,
+                        'action_taken_by' => $user->id,
+                        'is_sendback' => 0,
+                        'sendback_remark' => null,
+                    ]);
+            } elseif ($logic === 'and') {
+                // Reject only current user
+                $current->update([
+                    'status' => 'rejected',
+                    'remark' => $request->remark,
+                    'action_taken_by' => $user->id,
+                    'is_sendback' => 0,
+                    'sendback_remark' => null,
+                ]);
+            }
 
             // Mark ALL remaining pending steps as rejected
             RequestWorkflowDetails::where('request_id', $request_id)
                 ->where('status', 'pending')
-                ->update([
-                    'status' => 'rejected',
-                ]);
+                ->update(['status' => 'rejected']);
 
-            //  Sync request master
+            // Sync request master
             ModelsRequest::where('request_id', $request_id)
                 ->update(['status' => 'rejected']);
 
@@ -229,12 +276,24 @@ class RequestWorkflowDetailsController extends Controller
 
         // ------------------ SENDBACK ------------------ //
         if ($request->action === 'sendback') {
-            $current->update([
-                'is_sendback' => 1,
-                'sendback_remark' => $request->remark,
-                'remark' => null,
-                'action_taken_by' => $user->id,
-            ]);
+            // Sendback only affects current user in AND/Single, or all in OR
+            if ($logic === 'or') {
+                RequestWorkflowDetails::where('request_id', $request_id)
+                    ->where('workflow_step_id', $current->workflow_step_id)
+                    ->update([
+                        'is_sendback' => 1,
+                        'sendback_remark' => $request->remark,
+                        'remark' => null,
+                        'action_taken_by' => $user->id,
+                    ]);
+            } else {
+                $current->update([
+                    'is_sendback' => 1,
+                    'sendback_remark' => $request->remark,
+                    'remark' => null,
+                    'action_taken_by' => $user->id,
+                ]);
+            }
 
             // Move to previous step if exists
             $previousStep = RequestWorkflowDetails::where('request_id', $request_id)
@@ -243,9 +302,7 @@ class RequestWorkflowDetailsController extends Controller
                 ->first();
 
             if ($previousStep) {
-                $previousStep->update([
-                    'status' => 'pending',
-                ]);
+                $previousStep->update(['status' => 'pending']);
             }
 
             return response()->json([
