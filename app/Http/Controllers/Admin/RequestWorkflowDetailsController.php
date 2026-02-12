@@ -8,9 +8,10 @@ use App\Http\Controllers\Controller;
 use App\Models\RequestWorkflowDetails;
 use App\Models\User;
 use App\Models\WorkflowRoleAssign;
-use Illuminate\Http\Request;
 use App\Models\Request as ModelsRequest;
 use Illuminate\Support\Facades\Auth;
+use App\Models\Request as RequestModel;
+use Illuminate\Http\Request;
 
 class RequestWorkflowDetailsController extends Controller
 {
@@ -21,7 +22,7 @@ class RequestWorkflowDetailsController extends Controller
     {
         $userId = Auth::id();
 
-        $requests = Request::whereHas('workflowUsers', function ($q) use ($userId) {
+        $requests = RequestModel::whereHas('workflowUsers', function ($q) use ($userId) {
             $q->where('action_taken_by', $userId);
         })
             ->with([
