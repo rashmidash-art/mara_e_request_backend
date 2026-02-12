@@ -15,12 +15,8 @@ class WorkFlow_RoleAssignController extends Controller
     public function index()
     {
         try {
-            // $assignments = WorkflowRoleAssign::with(['role:id,name', 'workflow:id,name', 'step:id,name'])->get();
-$assignments = WorkflowRoleAssign::with([
-    'step:id,name',  // fetch only id and name
-    'role:id,name',
-    'workflow:id,name'
-])->get();
+            $assignments = WorkflowRoleAssign::with(['role:id,name', 'workflow:id,name', 'step:id,name'])->get();
+
             $assignments->transform(function ($assignment) {
                 $users = $assignment->assignedUsers(); // This returns a collection of User models
                 $assignment->assigned_users = $users->map(function ($user) {
@@ -89,10 +85,12 @@ $assignments = WorkflowRoleAssign::with([
                 ->toArray();
         }
 
+        // Step 4: Ensure $user_ids is always an array
         if (! is_array($user_ids)) {
             $user_ids = [$user_ids];
         }
 
+        // Step 5: Insert workflow role assignments
         foreach ($user_ids as $user_id) {
             DB::table('workflow_role_assigns')->insert([
                 'entity_id' => $entity_id,
@@ -398,6 +396,25 @@ $assignments = WorkflowRoleAssign::with([
         return response()->json([
             'status' => 'success',
             'data' => $roles,
+        ]);
+    }
+
+    public function getAssignedSteps($workflow_id)
+    {
+        // Only steps that have assignments in workflow_role_assigns
+        $steps = DB::table('workflow_steps as ws')
+            ->join('workflow_role_assigns as wra', function ($join) use ($workflow_id) {
+                $join->on('ws.id', '=', 'wra.step_id')
+                    ->where('wra.workflow_id', $workflow_id);
+            })
+            ->select('ws.id', 'ws.name', 'ws.order_id')
+            ->distinct()
+            ->orderBy('ws.order_id', 'ASC')
+            ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'steps' => $steps,
         ]);
     }
 }
