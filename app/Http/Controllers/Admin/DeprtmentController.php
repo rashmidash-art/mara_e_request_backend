@@ -153,7 +153,8 @@ class DeprtmentController extends Controller
     public function show($id)
     {
         try {
-            $department = Department::find($id);
+            $department = Department::with('manager')->find($id);
+
             if (! $department) {
                 return response()->json([
                     'status' => 'error',
@@ -161,10 +162,16 @@ class DeprtmentController extends Controller
                 ], 404);
             }
 
+            // Add user_id to the response
+            $departmentData = $department->toArray();
+            if ($department->manager) {
+                $departmentData['user_id'] = $department->manager->user_id;
+            }
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Department details retrieved successfully',
-                'data' => $department,
+                'data' => $departmentData,
             ], 200);
         } catch (QueryException $e) {
             return response()->json([
@@ -179,7 +186,6 @@ class DeprtmentController extends Controller
     public function update(Request $request, $id)
     {
         try {
-
             $department = Department::find($id);
 
             if (! $department) {
@@ -199,8 +205,7 @@ class DeprtmentController extends Controller
                     'string',
                     'max:255',
                     Rule::unique('departments')
-                        ->where(fn ($q) => $q->where('entiti_id', $request->entiti_id ?? $department->entiti_id)
-                        )
+                        ->where(fn ($q) => $q->where('entiti_id', $request->entiti_id ?? $department->entiti_id))
                         ->ignore($department->id),
                 ],
 
@@ -210,8 +215,7 @@ class DeprtmentController extends Controller
                     'string',
                     'max:50',
                     Rule::unique('departments', 'department_code')
-                        ->where(fn ($q) => $q->where('entiti_id', $request->entiti_id ?? $department->entiti_id)
-                        )
+                        ->where(fn ($q) => $q->where('entiti_id', $request->entiti_id ?? $department->entiti_id))
                         ->ignore($department->id),
                 ],
 
@@ -219,7 +223,7 @@ class DeprtmentController extends Controller
                 'budget' => 'sometimes|numeric|min:0',
                 'description' => 'nullable|string',
                 'status' => 'sometimes|integer|in:0,1',
-                'manager_id' => 'sometimes|nullable|integer|exists:managers,id',
+                'user_id' => 'sometimes|nullable|integer|exists:users,id', // Changed from manager_id to user_id
             ], [
                 'name.unique' => 'Department name already exists for this entity.',
                 'department_code.unique' => 'Department code already exists.',
@@ -252,16 +256,68 @@ class DeprtmentController extends Controller
                         .$entity->budget,
                 ], 400);
             }
+
             // Regenerate BC-Dimension only if department_code changed
             $newBcDimension = $department->bc_dimention_value;
             if ($request->department_code && $request->department_code !== $department->department_code) {
                 $newBcDimension = Department::generateBcDimension($request->department_code);
             }
 
+            // Handle manager update if user_id is provided
+            $managerId = $department->manager_id;
+
+            if ($request->has('user_id')) {
+                if ($request->user_id) {
+                    // User selected a manager
+                    $user = User::find($request->user_id);
+
+                    if ($department->manager_id) {
+                        // Update existing manager
+                        $manager = Manager::find($department->manager_id);
+                        if ($manager) {
+                            $manager->update([
+                                'user_id' => $request->user_id,
+                                'employee_id' => $user->employee_id ?? null,
+                                'name' => $user->name ?? null,
+                            ]);
+                            $managerId = $manager->id;
+                        } else {
+                            // Manager record was deleted, create new one
+                            $newManager = Manager::create([
+                                'user_id' => $request->user_id,
+                                'entiti_id' => $entityId,
+                                'department_id' => $department->id,
+                                'employee_id' => $user->employee_id ?? null,
+                                'name' => $user->name ?? null,
+                                'status' => 0,
+                            ]);
+                            $managerId = $newManager->id;
+                        }
+                    } else {
+                        // Create new manager
+                        $newManager = Manager::create([
+                            'user_id' => $request->user_id,
+                            'entiti_id' => $entityId,
+                            'department_id' => $department->id,
+                            'employee_id' => $user->employee_id ?? null,
+                            'name' => $user->name ?? null,
+                            'status' => 0,
+                        ]);
+                        $managerId = $newManager->id;
+                    }
+                } else {
+                    // User removed the manager
+                    if ($department->manager_id) {
+                        Manager::find($department->manager_id)?->delete();
+                    }
+                    $managerId = null;
+                }
+            }
+
             // Perform Update
             $department->update([
                 'entiti_id' => $entityId,
-                'manager_id' => $request->manager_id ?? $department->manager_id,
+                'manager_id' => $managerId,
                 'name' => $request->name ?? $department->name,
                 'department_code' => $request->department_code ?? $department->department_code,
                 'bc_dimention_value' => $newBcDimension,
@@ -278,8 +334,8 @@ class DeprtmentController extends Controller
             ], 200);
         } catch (ValidationException $e) {
             return response()->json([
-                'status' => 'error',
-                'message' => $e->errors(),
+                'status' => 'validation_error',
+                'errors' => $e->errors(),
             ], 422);
         } catch (QueryException $e) {
             return response()->json([
