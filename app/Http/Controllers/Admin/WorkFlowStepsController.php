@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\WorkflowRoleAssign;
 use App\Models\WorkflowStep;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
@@ -197,6 +198,7 @@ class WorkFlowStepsController extends Controller
             $step->update($validated);
             $this->updateStepCount($validated['workflow_id']);
             DB::commit();
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow step updated successfully',
@@ -289,6 +291,7 @@ class WorkFlowStepsController extends Controller
                         throw new \Exception('Request step must remain as the first step');
                     }
                     $step->update(['order_id' => 1]);
+
                     continue;
                 }
                 $currentOrder = $step->order_id;
@@ -311,22 +314,46 @@ class WorkFlowStepsController extends Controller
             }
             $this->updateStepCount($workflowId);
             DB::commit();
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflow steps reordered successfully',
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'status' => 'error',
                 'message' => $e->getMessage(),
             ], 400);
         }
     }
-    public function getStepByWorkflow($id)
+    // public function getStepByWorkflow($id)
+    // {
+    //     $steps = WorkflowStep::where('workflow_id', $id)->
+    //     where('escalation','enable')->get();
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'steps' => $steps,
+    //     ]);
+    // }
+
+    public function getStepByWorkflow($id, Request $request)
     {
-        $steps = WorkflowStep::where('workflow_id', $id)->
-        where('escalation','enable')->get();
+        $editingStepId = $request->step_id;
+
+        $assignedStepIds = WorkflowRoleAssign::where('workflow_id', $id)
+            ->when($editingStepId, function ($query) use ($editingStepId) {
+                $query->where('step_id', '!=', $editingStepId);
+            })
+            ->pluck('step_id')
+            ->toArray();
+
+        $steps = WorkflowStep::where('workflow_id', $id)
+            ->where('escalation', 'enable')
+            ->whereNotIn('id', $assignedStepIds)
+            ->get();
 
         return response()->json([
             'status' => 'success',

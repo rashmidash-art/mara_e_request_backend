@@ -15,8 +15,12 @@ class WorkFlow_RoleAssignController extends Controller
     public function index()
     {
         try {
-            $assignments = WorkflowRoleAssign::with(['role:id,name', 'workflow:id,name', 'step:id,name'])->get();
-
+            // $assignments = WorkflowRoleAssign::with(['role:id,name', 'workflow:id,name', 'step:id,name'])->get();
+$assignments = WorkflowRoleAssign::with([
+    'step:id,name',  // fetch only id and name
+    'role:id,name',
+    'workflow:id,name'
+])->get();
             $assignments->transform(function ($assignment) {
                 $users = $assignment->assignedUsers(); // This returns a collection of User models
                 $assignment->assigned_users = $users->map(function ($user) {
@@ -85,12 +89,10 @@ class WorkFlow_RoleAssignController extends Controller
                 ->toArray();
         }
 
-        // Step 4: Ensure $user_ids is always an array
         if (! is_array($user_ids)) {
             $user_ids = [$user_ids];
         }
 
-        // Step 5: Insert workflow role assignments
         foreach ($user_ids as $user_id) {
             DB::table('workflow_role_assigns')->insert([
                 'entity_id' => $entity_id,

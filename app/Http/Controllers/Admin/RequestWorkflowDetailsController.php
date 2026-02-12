@@ -5,13 +5,13 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 // use App\Models\Request;
 // use App\Models\Request as ModelsRequest;
+use App\Models\Request as ModelsRequest;
+use App\Models\Request as RequestModel;
 use App\Models\RequestWorkflowDetails;
 use App\Models\User;
 use App\Models\WorkflowRoleAssign;
-use App\Models\Request as ModelsRequest;
-use Illuminate\Support\Facades\Auth;
-use App\Models\Request as RequestModel;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class RequestWorkflowDetailsController extends Controller
 {
@@ -146,6 +146,13 @@ class RequestWorkflowDetailsController extends Controller
 
         $user = Auth::user();
 
+        if (! $user) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Unauthenticated user',
+            ], 401);
+        }
+
         // Get the current pending workflow step for this user
         $current = RequestWorkflowDetails::where('request_id', $request_id)
             ->where('assigned_user_id', $user->id)
@@ -165,6 +172,13 @@ class RequestWorkflowDetailsController extends Controller
         if ($request->action === 'approve') {
 
             $requestData = ModelsRequest::where('request_id', $request_id)->first();
+
+            if (! $requestData) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Request not found in master table',
+                ], 404);
+            }
 
             if ($requestData->amount > $user->loa) {
                 return response()->json([

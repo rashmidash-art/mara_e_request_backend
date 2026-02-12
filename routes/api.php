@@ -66,6 +66,12 @@ Route::middleware('auth:api,entiti-api')->group(function () {
     Route::middleware(['auth:api'])->group(function () {
         Route::get('user/{id}/loa', action: [BudgetController::class, 'getLoaByUser']);
 
+        Route::apiResource('requestWorkflow', RequestWorkflowDetailsController::class);
+        Route::post('/request-workflow/{request_id}/action', [RequestWorkflowDetailsController::class, 'takeAction']);
+
+        Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
+        Route::post('/requests/action', [RequestWorkflowDetailsController::class, 'takeAction']);
+
         // Route::get('/requestDetails', [CreateRequestController::class, 'requestDetailsAll']);
 
     });
@@ -77,8 +83,8 @@ Route::middleware('auth:api,entiti-api')->group(function () {
     Route::middleware(['permission'])->group(function () {
         Route::apiResource('request', controller: CreateRequestController::class);
 
-        Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
-        Route::post('/requests/action', [RequestWorkflowDetailsController::class, 'takeAction']);
+        // Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
+        // Route::post('/requests/action', [RequestWorkflowDetailsController::class, 'takeAction']);
     });
     Route::middleware(['auth:api,entiti-api', 'permission'])->group(function () {
         Route::apiResource('roles', RoleController::class);
@@ -158,8 +164,8 @@ Route::middleware('auth:api,entiti-api')->group(function () {
 
         Route::apiResource('budgetCode', controller: BudgetCodeController::class);
         Route::get('budgetCode/preview', [BudgetCodeController::class, 'preview']);
-        Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
-        Route::post('/request-workflow/{request_id}/action', [RequestWorkflowDetailsController::class, 'takeAction']);
+        // Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
+        // Route::post('/request-workflow/{request_id}/action', [RequestWorkflowDetailsController::class, 'takeAction']);
 
     });
 
