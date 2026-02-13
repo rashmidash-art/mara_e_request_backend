@@ -16,7 +16,8 @@ class WorkFlowController extends Controller
     public function index()
     {
         try {
-            $workflows = WorkFlow::all();
+            // $workflows = WorkFlow::all();
+            $workflows = WorkFlow::orderBy('id', 'desc')->get();
 
             return response()->json([
                 'status' => 'success',
@@ -37,10 +38,11 @@ class WorkFlowController extends Controller
      */
     public function store(Request $request)
     {
+        // Validate input
         $validated = $request->validate([
-            'entity_id' => 'nullable|integer',
-            'categori_id' => 'nullable|integer',
-            'request_type_id' => 'nullable|integer',
+            'entity_id' => 'nullable|integer|exists:entitis,id',
+            'categori_id' => 'nullable|integer|exists:categories,id',
+            'request_type_id' => 'nullable|integer|exists:request_types,id',
             'name' => 'nullable|string|max:255',
             'steps' => 'nullable|integer',
             'status' => 'nullable|integer',
@@ -48,12 +50,21 @@ class WorkFlowController extends Controller
         ]);
 
         try {
-            // Generate workflow_id automatically: WF001, WF002...
+            $exists = WorkFlow::where('entity_id', $validated['entity_id'])
+                ->where('categori_id', $validated['categori_id'])
+                ->where('request_type_id', $validated['request_type_id'])
+                ->exists();
+
+            if ($exists) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'A workflow already exists for this Entity + Category + Request Type combination.',
+                ], 422);
+            }
+
             $lastWorkflow = WorkFlow::latest('id')->first();
             $nextId = $lastWorkflow ? $lastWorkflow->id + 1 : 1;
-            $workflowId = 'WF'.str_pad($nextId, 3, '0', STR_PAD_LEFT);
-
-            $validated['workflow_id'] = $workflowId;
+            $validated['workflow_id'] = 'WF'.str_pad($nextId, 3, '0', STR_PAD_LEFT);
 
             $workflow = WorkFlow::create($validated);
 
@@ -61,8 +72,9 @@ class WorkFlowController extends Controller
                 'status' => 'success',
                 'message' => 'Workflow created successfully',
                 'data' => $workflow,
-            ], 200);
-        } catch (QueryException $e) {
+            ], 201);
+
+        } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to create workflow',
@@ -99,9 +111,9 @@ class WorkFlowController extends Controller
     public function update(Request $request, string $id)
     {
         $validated = $request->validate([
-            'entity_id' => 'nullable|integer',
-            'categori_id' => 'nullable|integer',
-            'request_type_id' => 'nullable|integer',
+            'entity_id' => 'nullable|integer|exists:entitis,id',
+            'categori_id' => 'nullable|integer|exists:categories,id',
+            'request_type_id' => 'nullable|integer|exists:request_types,id',
             'name' => 'nullable|string|max:255',
             'steps' => 'nullable|integer',
             'status' => 'nullable|integer',
@@ -111,7 +123,25 @@ class WorkFlowController extends Controller
         try {
             $workflow = WorkFlow::findOrFail($id);
 
-            // Only update the allowed fields
+            // Use existing values if not provided
+            $entityId = $validated['entity_id'] ?? $workflow->entity_id;
+            $categoryId = $validated['categori_id'] ?? $workflow->categori_id;
+            $requestTypeId = $validated['request_type_id'] ?? $workflow->request_type_id;
+
+            // Check duplicate (excluding current workflow)
+            $exists = WorkFlow::where('entity_id', $entityId)
+                ->where('categori_id', $categoryId)
+                ->where('request_type_id', $requestTypeId)
+                ->where('id', '!=', $workflow->id)
+                ->exists();
+
+            if ($exists) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'A workflow already exists for this Entity + Category + Request Type combination.',
+                ], 422);
+            }
+
             $workflow->update($validated);
 
             return response()->json([
@@ -119,12 +149,13 @@ class WorkFlowController extends Controller
                 'message' => 'Workflow updated successfully',
                 'data' => $workflow,
             ], 200);
+
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Workflow not found',
                 'error' => $e->getMessage(),
-            ], 401);
+            ], 404);
         } catch (QueryException $e) {
             return response()->json([
                 'status' => 'error',

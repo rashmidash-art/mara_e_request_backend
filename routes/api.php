@@ -71,6 +71,10 @@ Route::middleware('auth:api,entiti-api')->group(function () {
 
         Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
         Route::post('/requests/action', [RequestWorkflowDetailsController::class, 'takeAction']);
+        Route::get(
+            'entity/{entityId}/category/{categoryId}/supplier',
+            [SupplierController::class, 'getSupplierbyEntityandCatrhory']
+        );
 
         // Route::get('/requestDetails', [CreateRequestController::class, 'requestDetailsAll']);
 

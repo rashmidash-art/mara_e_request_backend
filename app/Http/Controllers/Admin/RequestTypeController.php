@@ -8,8 +8,8 @@ use App\Models\RequestType;
 use Exception;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class RequestTypeController extends Controller
 {
@@ -49,6 +49,7 @@ class RequestTypeController extends Controller
                     'request_code' => 'required|string|max:255|unique:request_types,request_code',
                     'name' => 'required|string|max:255|unique:request_types,name',
                     'descripton' => 'nullable|string',
+                    'budget' => 'nullable|numeric|min:0',
                     'status' => 'required|string|max:255',
                 ],
                 [
@@ -67,6 +68,7 @@ class RequestTypeController extends Controller
                 'status' => $request->status,
                 'loa_validation' => $request->loa_validation,
                 'administrative_request' => $request->administrative_request,
+                'budget' => $request->budget,
             ]);
 
             return response()->json([
@@ -164,6 +166,7 @@ class RequestTypeController extends Controller
                 'status' => 'sometimes|required|string|max:255',
                 'loa_validation' => 'nullable|string|max:255',
                 'administrative_request' => 'nullable|string|max:255',
+                'budget' => 'nullable|numeric|min:0',
             ]);
 
             $requestType->update($validated);

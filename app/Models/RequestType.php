@@ -9,7 +9,7 @@ class RequestType extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['categori_id', 'request_code', 'name','administrative_request','loa_validation', 'descripton', 'status'];
+    protected $fillable = ['categori_id', 'request_code','budget','name','administrative_request','loa_validation', 'descripton', 'status'];
 
     public function category()
     {

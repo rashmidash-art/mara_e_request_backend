@@ -75,8 +75,9 @@ class EntitiesController extends Controller
             'name' => 'required|string|max:255',
             'email' => [
                 'required',
-                'email:rfc,dns',
-                'unique:entitis,email',
+                'email',
+                // 'email:rfc,dns',
+                // 'unique:entitis,email',
             ],
             'password' => 'required|string|min:6',
             'company_code' => 'nullable|string|max:50',
@@ -157,7 +158,8 @@ class EntitiesController extends Controller
             'email' => [
                 'sometimes',
                 'required',
-                'email:rfc,dns',
+                'email',
+                // 'email:rfc,dns',
                 Rule::unique('entitis', 'email')->ignore($entity->id),
             ],
 

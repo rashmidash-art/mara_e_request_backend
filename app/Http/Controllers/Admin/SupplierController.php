@@ -296,4 +296,55 @@ class SupplierController extends Controller
             ], 500);
         }
     }
+
+    public function getSupplierbyEntityandCatrhory($entityId, $categoryId)
+    {
+        try {
+            $suppliers = Supplier::where('entiti_id', $entityId)
+                ->where('status', 'Active')
+                ->get()
+                ->filter(function ($supplier) use ($categoryId) {
+                    if (! $supplier->categories) {
+                        return false;
+                    }
+
+                    $categoryIds = explode(',', $supplier->categories);
+
+                    return in_array($categoryId, $categoryIds);
+                })
+                ->values()
+                ->map(function ($supplier) {
+
+                    // Fetch requests with rating
+                    $requests = ModelsRequest::with('supplierRating')
+                        ->where('supplier_id', $supplier->id)
+                        ->get();
+
+                    // Only rated requests
+                    $ratedRequests = $requests->filter(function ($r) {
+                        return $r->supplierRating && $r->supplierRating->rating !== null;
+                    });
+
+                    // Calculate average rating
+                    $supplier->avg_rating = $ratedRequests->count() > 0
+                        ? round($ratedRequests->avg(fn ($r) => $r->supplierRating->rating), 1)
+                        : null;
+
+                    return $supplier;
+                });
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Suppliers retrieved successfully',
+                'data' => $suppliers,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch suppliers',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
