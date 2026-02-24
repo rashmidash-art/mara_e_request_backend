@@ -136,8 +136,8 @@
                     left: {{ $x * 200 }}px;
                  ">
                     {{ $request->userData?->name }}
-                    | {{ $request->request_id }}
-                    | {{ $request->created_at?->format('Y-m-d h:i') }}
+                    |{{ $request->request_id }}
+                    |{{ $request->created_at?->format('Y-m-d h:i') }}
                 </div>
             @endfor
         @endfor
@@ -159,6 +159,7 @@
     <h5>Request Details</h5>
     <p><b>Amount:</b> RM {{ number_format($request->amount, 2) }}</p>
     <p><b>Department:</b> {{ $request->departmentData?->name ?? '-' }}</p>
+    <p><b>Supplier Name:</b> {{ $request->supplierData?->name ?? '-' }}</p>
     <p><b>Priority:</b> {{ $request->priority ?? '-' }}</p>
     <p><b>Description:</b><br> {!! $request->description === strip_tags($request->description)
         ? nl2br(e($request->description))
@@ -199,7 +200,7 @@
         <thead>
             <tr>
                 <th>Prepared by</th>
-                <th>Remarks</th>
+                {{-- <th>Remarks</th> --}}
             </tr>
         </thead>
         <tbody>
@@ -209,23 +210,21 @@
                     {{ $request->departmentData?->name ?? 'N/A' }}<br>
                     {{ $request->created_at?->format('d F Y') }}
                 </td>
-                <td></td>
+                {{-- <td></td> --}}
             </tr>
         </tbody>
     </table>
-
-    {{-- Subsequent steps: Workflow Approval steps --}}
-    @php
-        // Prepare step titles (you can customize as needed)
+    {{-- @php
         $stepTitles = [
             2 => 'Department Review',
             3 => 'Blockchain Request Review',
-            // Add more steps here if needed
         ];
-    @endphp
+    @endphp --}}
 
     @foreach ($workflowTimeline as $index => $step)
-        <div class="step-title">{{ $index + 2 }}. {{ $stepTitles[$index + 2] ?? 'Approval Step' }}</div>
+        <div class="step-title">
+             {{ $index + 2 }}. {{ $step['step'] ?? $step['stage'] ?? 'Approval Step' }}
+        </div>
         <table>
             <thead>
                 <tr>
@@ -272,6 +271,83 @@
         </table>
     @endforeach
 
+    {{-- @if ($request->poDetails)
+        <h4 class="section-title">PO Details</h4>
+
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>PO Number</th>
+                    <th>PO Date</th>
+                    <th class="text-right">PO Amount (RM)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{{ $request->poDetails->po_number }}</td>
+                    <td>{{ $request->poDetails->po_date }}</td>
+                    <td class="text-right">
+                        {{ number_format($request->poDetails->po_amount, 2) }}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    @endif
+
+    @if ($request->deliveries->count())
+        <h4 class="section-title"> Delivery Details</h4>
+
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Delivery Number</th>
+                    <th>Delivery Date</th>
+                    <th class="text-right">Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($request->deliveries as $index => $delivery)
+                    <tr>
+                        <td>{{ $index + 1 }}</td>
+                        <td>{{ $delivery->delivery_number }}</td>
+                        <td>{{ $delivery->delivery_date }}</td>
+                        <td class="text-right">
+                            {{ number_format($delivery->delivery_quantity) }}
+                        </td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
+
+
+    @if ($request->payments->count())
+        <h4 class="section-title">Payment Details</h4>
+
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Payment Number</th>
+                    <th>Payment Date</th>
+                    <th class="text-right">Payment Amount (RM)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($request->payments as $index => $payment)
+                    <tr>
+                        <td>{{ $index + 1 }}</td>
+                        <td>{{ $payment->payment_number }}</td>
+                        <td>{{ $payment->payment_date }}</td>
+                        <td class="text-right">
+                            {{ number_format($payment->payment_amount, 2) }}
+                        </td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif --}}
 
     @if (!empty($lifecycleTimeline))
         <h5>Request Lifecycle</h5>
@@ -285,8 +361,6 @@
             @endforeach
         </ul>
     @endif
-
-
 
 </body>
 

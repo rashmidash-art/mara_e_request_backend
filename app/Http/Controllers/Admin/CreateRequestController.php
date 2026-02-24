@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\BudgetCode;
+use App\Models\DeliveryOrerDetails;
 use App\Models\Department;
 use App\Models\Document;
 use App\Models\Entiti;
+use App\Models\PaymentDetails;
+use App\Models\PoUploadDetalils;
 use App\Models\Request as ModelsRequest;
 use App\Models\RequestDetailsDocuments;
 use App\Models\RequestDocument;
@@ -32,6 +36,7 @@ class CreateRequestController extends Controller
             $auth = Auth::user();
             $isEntityLogin = $auth instanceof Entiti;
             $isSuperAdmin = ! $isEntityLogin && isset($auth->user_type) && $auth->user_type == 0;
+
             $query = ModelsRequest::with([
                 'categoryData:id,name',
                 'entityData:id,name',
@@ -40,65 +45,45 @@ class CreateRequestController extends Controller
                 'departmentData:id,name',
                 'supplierData:id,name',
                 'budgetCode:id,budget_code',
-                'documents:id,request_id,document_id,document', // Eager load the documents
+                'documents:id,request_id,document_id,document',
                 'currentWorkflowRole' => function ($q) {
-                    $q->select(
-                        'id',
-                        'request_id',
-                        'workflow_role_id',
-                        'assigned_user_id',
-                        'status',
-                        'workflow_step_id'
-                    );
+                    $q->select('id', 'request_id', 'workflow_role_id', 'assigned_user_id', 'status', 'workflow_step_id');
                 },
                 'currentWorkflowRole.role:id,name',
                 'currentWorkflowRole.assignedUser:id,name',
                 'currentWorkflowRole.workflowStep:id,name',
+                // ✅ Add these
+                'workflowHistory' => function ($q) {
+                    $q->with(['role', 'assignedUser', 'workflowStep'])->orderBy('id', 'asc');
+                },
+                'requestDetailsDocuments',
+                'supplierRating',
             ])->orderByDesc('id');
+
             if ($isSuperAdmin) {
                 $requests = $query->get();
             } elseif ($isEntityLogin) {
                 $requests = $query->where('entiti', $auth->id)->get();
             } else {
-                // $userId = $auth->id;
-
-                // $requests = $query
-                //     // ->where('user', '!=', $userId)
-                //     ->whereHas('currentWorkflowRole', function ($q) use ($userId) {
-                //         $q->where('assigned_user_id', $userId)
-                //             ->where('status', 'pending');
-                //     })
-                //     ->get();
-
                 $userId = $auth->id;
-
                 $requests = $query
-                //   ->where('status', 'pending')
                     ->whereHas('workflowDetails', function ($q) use ($userId) {
-
                         $q->where('assigned_user_id', $userId)
                             ->whereRaw('workflow_step_id = (
-                SELECT workflow_step_id
-                FROM request_workflow_details rwd
-                WHERE rwd.request_id = request_workflow_details.request_id
-                  AND rwd.status = "pending"
-                ORDER BY workflow_step_id ASC
-                LIMIT 1
-          )');
-
+                            SELECT workflow_step_id
+                            FROM request_workflow_details rwd
+                            WHERE rwd.request_id = request_workflow_details.request_id
+                              AND rwd.status = "pending"
+                            ORDER BY workflow_step_id ASC
+                            LIMIT 1
+                        )');
                     })
                     ->get();
-
-                // $requests = $query->whereHas('currentWorkflowRole', function ($q) use ($userId) {
-                //     $q->where('assigned_user_id', $userId)
-                //         ->where('status', 'pending');
-                // })->get();
             }
 
             $data = $requests->map(function ($req) {
 
                 $workflow = $req->currentWorkflowRole;
-
                 $finalStatus = $req->getFinalStatus();
 
                 $currentStage = match ($finalStatus['final_status']) {
@@ -108,6 +93,92 @@ class CreateRequestController extends Controller
                     default => $finalStatus['pending_by'],
                 };
 
+                // ✅ Build workflow timeline (same as requestDetailsAll)
+                $workflowTimeline = $req->workflowHistory
+                    ->groupBy('workflow_step_id')
+                    ->map(function ($steps) {
+                        $first = $steps->first();
+                        $lastAction = $steps->whereIn('status', ['approved', 'rejected'])
+                            ->sortByDesc('updated_at')
+                            ->first();
+
+                        return [
+                            'stage' => $first->workflowStep?->name ?? 'N/A',
+                            'role' => $steps->pluck('role.name')->unique()->join(', '),
+                            'assigned_user' => $lastAction?->assignedUser?->name,
+                            'status' => $lastAction?->status ?? 'pending',
+                            'date' => $lastAction?->updated_at?->format('Y-m-d'),
+                        ];
+                    })
+                    ->values()
+                    ->toArray();
+
+                // ✅ Build status timeline (same as requestDetailsAll)
+                $statusTimeline = [[
+                    'stage' => 'Submitted',
+                    'status' => 'submitted',
+                    'actor_name' => $req->userData?->name ?? 'Requester',
+                    'date' => $req->created_at?->format('Y-m-d'),
+                ]];
+
+                if ($req->status === 'withdraw') {
+                    $statusTimeline[] = [
+                        'stage' => 'Withdrawn',
+                        'status' => 'withdraw',
+                        'actor_name' => $req->userData?->name ?? 'Requester',
+                        'date' => $req->updated_at?->format('Y-m-d'),
+                    ];
+                } else {
+                    $statusTimeline = array_merge($statusTimeline, $workflowTimeline);
+
+                    $doc = $req->requestDetailsDocuments;
+
+                    if ($doc?->is_po_created) {
+                        $statusTimeline[] = [
+                            'stage' => 'PO Created',
+                            'status' => 'po created',
+                            'actor_name' => $req->userData?->name,
+                            'date' => $doc->po_date,
+                        ];
+                    }
+
+                    if ($doc?->is_delivery_completed) {
+                        $statusTimeline[] = [
+                            'stage' => 'Delivery Completed',
+                            'status' => 'delivery completed',
+                            'actor_name' => $req->userData?->name,
+                            'date' => $doc->delivery_completed_date,
+                        ];
+                    }
+
+                    if ($doc?->is_payment_completed) {
+                        $statusTimeline[] = [
+                            'stage' => 'Payment Completed',
+                            'status' => 'payment completed',
+                            'actor_name' => $req->userData?->name,
+                            'date' => $doc->payment_completed_date,
+                        ];
+                    }
+
+                    if ($req->supplierRating) {
+                        $statusTimeline[] = [
+                            'stage' => 'Supplier Rated',
+                            'status' => 'supplier rated',
+                            'actor_name' => $req->userData?->name,
+                            'date' => $req->supplierRating->created_at?->format('Y-m-d'),
+                        ];
+                    }
+
+                    if ($req->status === 'closed') {
+                        $statusTimeline[] = [
+                            'stage' => 'Closed',
+                            'status' => 'closed',
+                            'actor_name' => 'System',
+                            'date' => $req->updated_at?->format('Y-m-d'),
+                        ];
+                    }
+                }
+
                 return [
                     'id' => $req->id,
                     'request_id' => $req->request_id,
@@ -115,10 +186,8 @@ class CreateRequestController extends Controller
                     'priority' => $req->priority,
                     'description' => $req->description,
                     'status' => $req->status,
-
                     'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
                     'updated_at' => $req->updated_at?->format('Y-m-d H:i:s'),
-
                     'final_status' => $finalStatus['final_status'],
                     'pending_by' => $finalStatus['pending_by'],
                     'current_stage' => $currentStage,
@@ -128,41 +197,13 @@ class CreateRequestController extends Controller
                         'name' => $req->userData?->name,
                         'designation' => $req->userData?->designation,
                     ],
-
-                    'category' => [
-                        'id' => $req->category,
-                        'name' => $req->categoryData?->name,
-                    ],
-
-                    'entity' => [
-                        'id' => $req->entiti,
-                        'name' => $req->entityData?->name,
-                    ],
-
-                    'department' => [
-                        'id' => $req->department,
-                        'name' => $req->departmentData?->name,
-                    ],
-
-                    'budget_code' => [
-                        'id' => $req->budget_code,
-                        'name' => $req->budgetCode?->budget_code,
-                    ],
-
-                    'requested_by' => [
-                        'id' => $req->user,
-                        'name' => $req->userData?->name,
-                    ],
-
-                    'request_type' => [
-                        'id' => $req->request_type,
-                        'name' => $req->requestTypeData?->name,
-                    ],
-
-                    'supplier' => [
-                        'id' => $req->supplier_id,
-                        'name' => $req->supplierData?->name,
-                    ],
+                    'category' => ['id' => $req->category,    'name' => $req->categoryData?->name],
+                    'entity' => ['id' => $req->entiti,      'name' => $req->entityData?->name],
+                    'department' => ['id' => $req->department,  'name' => $req->departmentData?->name],
+                    'budget_code' => ['id' => $req->budget_code, 'name' => $req->budgetCode?->budget_code],
+                    'requested_by' => ['id' => $req->user,        'name' => $req->userData?->name],
+                    'request_type' => ['id' => $req->request_type, 'name' => $req->requestTypeData?->name],
+                    'supplier' => ['id' => $req->supplier_id, 'name' => $req->supplierData?->name],
 
                     'workflow' => [
                         'step' => $workflow?->workflowStep?->name,
@@ -171,33 +212,23 @@ class CreateRequestController extends Controller
                         'status' => $workflow?->status,
                     ],
 
-                    // Include documents with only document_id and document name
-                    // 'documents' => $req->documents->map(function ($doc) {
-                    //     return [
-                    //         'document_id' => $doc->document_id,
-                    //         'document'    => $doc->document
-                    //     ];
-                    // }),
+                    // ✅ Now included
+                    'workflow_history' => $workflowTimeline,
+                    'status_timeline' => $statusTimeline,
 
                     'documents' => $req->documents->map(function ($doc) {
-                        // Extract the actual filename after the last underscore
-                        $filename = last(explode('_', $doc->document));
-
                         return [
                             'document_id' => $doc->document_id,
-                            'document' => $filename,
+                            'document' => last(explode('_', $doc->document)),
                             'url' => asset('storage/requestdocuments/'.$doc->document),
                         ];
                     }),
                 ];
             });
 
-            return response()->json([
-                'status' => 'success',
-                'data' => $data,
-            ]);
-        } catch (\Exception $e) {
+            return response()->json(['status' => 'success', 'data' => $data]);
 
+        } catch (\Exception $e) {
             Log::error('Request index failed: '.$e->getMessage());
 
             return response()->json([
@@ -232,7 +263,7 @@ class CreateRequestController extends Controller
                 'attachments.*.document_id' => 'nullable|integer',
                 'attachments.*.file' => 'required|file|max:10240',
                 'budget_code' => 'nullable|exists:budget_codes,id',
-                'behalf_of_buget_code' => 'required_if:behalf_of,1|exists:budget_codes,id',
+                'behalf_of_buget_code' => 'nullable|exists:budget_codes,id',
 
             ]);
 
@@ -260,30 +291,30 @@ class CreateRequestController extends Controller
                 'behalf_of_department' => $request->behalf_of_department,
                 'behalf_of_buget_code' => $request->behalf_of_buget_code,
                 'business_justification' => $request->business_justification,
-                'status' => $request->status ?? 'draft',
+                'status' => $request->status ?? ModelsRequest::DRAFT,
             ]);
 
-            RequestDetailsDocuments::create([
-                'request_details_id' => $req->id,
-                'request_id' => $req->request_id,
+            // RequestDetailsDocuments::create([
+            //     'request_details_id' => $req->id,
+            //     'request_id' => $req->request_id,
 
-                'is_po_created' => 0,
-                'po_number' => null,
-                'po_date' => null,
-                'po_documents' => null,
+            //     'is_po_created' => 0,
+            //     'po_number' => null,
+            //     'po_date' => null,
+            //     'po_documents' => null,
 
-                'is_delivery_completed' => 0,
-                'delivery_completed_number' => null,
-                'delivery_completed_date' => null,
-                'delivery_completed_documents' => null,
+            //     'is_delivery_completed' => 0,
+            //     'delivery_completed_number' => null,
+            //     'delivery_completed_date' => null,
+            //     'delivery_completed_documents' => null,
 
-                'is_payment_completed' => 0,
-                'payment_completed_number' => null,
-                'payment_completed_date' => null,
-                'payment_completed_documents' => null,
+            //     'is_payment_completed' => 0,
+            //     'payment_completed_number' => null,
+            //     'payment_completed_date' => null,
+            //     'payment_completed_documents' => null,
 
-                'status' => 'pending',
-            ]);
+            //     'status' => 'pending',
+            // ]);
 
             // ------------------------- ATTACHMENTS ------------------------- //
             if (! empty($request->attachments)) {
@@ -412,40 +443,6 @@ class CreateRequestController extends Controller
         }
     }
 
-    /** Create a new request */
-    public function show($id)
-    {
-        try {
-            $req = ModelsRequest::find($id);
-
-            if (! $req) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Request not found',
-                ], 404);
-            }
-
-            $documents = RequestDocument::where('request_id', $req->id)->get();
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Request details retrieved',
-                'data' => [
-                    'request' => $req,
-                    'documents' => $documents,
-                ],
-            ], 200);
-        } catch (\Exception $e) {
-            Log::error('Request Fetch Error', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to fetch request',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
     /** Update request */
     public function update(Request $request, $id)
     {
@@ -456,6 +453,36 @@ class CreateRequestController extends Controller
                 'status' => 'error',
                 'message' => 'Request not found',
             ], 404);
+        }
+
+        /**
+         * ===============================
+         * RECALL REQUEST
+         * ===============================
+         */
+        if ($request->status === 'draft') {
+
+            if (! in_array($req->status, ['submitted', 'pending', 'in approval'])) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Only submitted or pending requests can be recalled',
+                ], 422);
+            }
+
+            DB::transaction(function () use ($req) {
+
+                $req->update(['status' => 'draft']);
+
+                // Cancel pending workflow approvals
+                RequestWorkflowDetails::where('request_id', $req->request_id)
+                    ->where('status', 'pending')
+                    ->update(['status' => 'cancelled']);
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Request recalled to draft successfully',
+            ]);
         }
 
         /**
@@ -506,7 +533,7 @@ class CreateRequestController extends Controller
             'priority' => 'nullable|string',
             'behalf_of' => 'nullable|in:0,1',
             'behalf_of_department' => 'required_if:behalf_of,1',
-            'behalf_of_buget_code' => 'required_if:behalf_of,1|exists:budget_codes,id',
+            'behalf_of_buget_code' => 'nullable|exists:budget_codes,id',
             'business_justification' => 'nullable|string',
             'status' => 'nullable|string',
 
@@ -532,6 +559,7 @@ class CreateRequestController extends Controller
              * UPDATE REQUEST MASTER
              * ===============================
              */
+            $oldStatus = $req->getOriginal('status');
             $req->update($request->only([
                 'entiti',
                 'user',
@@ -595,16 +623,25 @@ class CreateRequestController extends Controller
              */
             if ($request->hasFile('po_documents')) {
 
+                if ($req->poDetails()->exists()) {
+                    throw new \Exception('PO already created for this request');
+                }
+
                 $file = $request->file('po_documents');
                 $name = 'po_'.$req->request_id.'_'.$file->getClientOriginalName();
                 $file->storeAs('request_documents', $name, 'public');
 
-                $doc->update([
+                PoUploadDetalils::create([
+                    'request_id' => $req->request_id,
                     'is_po_created' => 1,
                     'po_number' => $request->po_number,
+                    'po_amount' => $request->po_amount,
                     'po_date' => $request->po_date,
                     'po_documents' => $name,
+                    'status' => 'completed',
                 ]);
+
+                $req->refresh()->recalculateStatus();
             }
 
             /**
@@ -612,47 +649,66 @@ class CreateRequestController extends Controller
              * DELIVERY (PO REQUIRED)
              * ===============================
              */
-            if ($request->hasFile('delivery_completed_documents')) {
+            if ($request->hasFile('delivery_documents')) {
 
-                if (! $doc->is_po_created) {
+                if (! $req->poDetails()->exists()) {
                     throw new \Exception('Upload PO before delivery');
                 }
 
-                $file = $request->file('delivery_completed_documents');
-                $name = 'delivery_'.$req->request_id.'_'.$file->getClientOriginalName();
+                $file = $request->file('delivery_documents');
+                $name = 'delivery_'.$req->request_id.'_'.time().'_'.$file->getClientOriginalName();
                 $file->storeAs('request_documents', $name, 'public');
 
-                $doc->update([
-                    'is_delivery_completed' => 1,
-                    'delivery_completed_number' => $request->delivery_completed_number,
-                    'delivery_completed_date' => $request->delivery_completed_date,
-                    'delivery_completed_documents' => $name,
+                DeliveryOrerDetails::create([
+                    'request_id' => $req->request_id,
+                    'is_delivery_completed' => $request->is_delivery_completed == 1 ? 1 : 0,                    'delivery_number' => $request->delivery_number,
+                    'delivery_date' => $request->delivery_date,
+                    'delivery_quantity' => $request->delivery_quantity,
+                    'delivery_documents' => $name,
+                    'status' => 'completed',
                 ]);
+
+                $req->refresh()->recalculateStatus();
             }
 
+            /**
+             * =======================================
+             * RESTORE WORKFLOW (Draft → Submitted)
+             * =======================================
+             */
+            if ($oldStatus === 'draft' && $request->status === 'submitted') {
+
+                RequestWorkflowDetails::where('request_id', $req->request_id)
+                    ->where('status', 'cancelled')
+                    ->update(['status' => 'pending']);
+            }
             /**
              * ===============================
              * PAYMENT (DELIVERY REQUIRED)
              * ===============================
              */
-            if ($request->hasFile('payment_completed_documents')) {
+            if ($request->hasFile('payment_documents')) {
 
-                if (! $doc->is_delivery_completed) {
+                if (! $req->deliveries()->exists()) {
                     throw new \Exception('Complete delivery before payment');
                 }
 
-                $file = $request->file('payment_completed_documents');
-                $name = 'payment_'.$req->request_id.'_'.$file->getClientOriginalName();
+                $file = $request->file('payment_documents');
+                $name = 'payment_'.$req->request_id.'_'.time().'_'.$file->getClientOriginalName();
                 $file->storeAs('request_documents', $name, 'public');
 
-                $doc->update([
-                    'is_payment_completed' => 1,
-                    'payment_completed_number' => $request->payment_completed_number,
-                    'payment_completed_date' => $request->payment_completed_date,
-                    'payment_completed_documents' => $name,
+                PaymentDetails::create([
+                    'request_id' => $req->request_id,
+                    'is_payment_completed' => $request->is_payment_completed == 1 ? 1 : 0,
+                    'payment_number' => $request->payment_number,
+                    'payment_amount' => $request->payment_amount,
+                    'payment_date' => $request->payment_date,
+                    'payment_documents' => $name,
+                    'status' => 'completed',
                 ]);
-            }
 
+                $req->refresh()->recalculateStatus();
+            }
             /**
              * ===============================
              * SUPPLIER RATING (PAYMENT REQUIRED)
@@ -664,7 +720,7 @@ class CreateRequestController extends Controller
                     throw new \Exception('Only request owner can rate supplier');
                 }
 
-                if (! $doc->is_payment_completed) {
+                if (! $req->payments()->exists()) {
                     throw new \Exception('Complete payment before rating');
                 }
 
@@ -685,7 +741,7 @@ class CreateRequestController extends Controller
                     'status' => 'completed',
                 ]);
 
-                $req->update(['status' => 'closed']);
+                $req->changeStatus(ModelsRequest::CLOSED);
             }
         });
 
@@ -693,6 +749,40 @@ class CreateRequestController extends Controller
             'status' => 'success',
             'message' => 'Request updated successfully',
         ]);
+    }
+
+    /** Create a new request */
+    public function show($id)
+    {
+        try {
+            $req = ModelsRequest::find($id);
+
+            if (! $req) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Request not found',
+                ], 404);
+            }
+
+            $documents = RequestDocument::where('request_id', $req->id)->get();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Request details retrieved',
+                'data' => [
+                    'request' => $req,
+                    'documents' => $documents,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Request Fetch Error', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch request',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     // public function update(Request $request, $id)
@@ -871,6 +961,9 @@ class CreateRequestController extends Controller
                 /* ======================================================
                  * 1. Workflow timeline (deduplicated)
                  * ====================================================== */
+                /* ======================================================
+                   1. Workflow timeline (deduplicated)
+                ====================================================== */
                 $workflowTimeline = $req->workflowHistory
                     ->groupBy('workflow_step_id')
                     ->map(function ($steps) {
@@ -891,11 +984,17 @@ class CreateRequestController extends Controller
                     ->toArray();
 
                 /* ======================================================
-                 * 2. Unified Status Timeline
-                 * ====================================================== */
+                   2. Unified Status Timeline
+                ====================================================== */
+
+                // Submitted
                 $statusTimeline = [];
 
-                // Submitted (always)
+                /*
+                |--------------------------------------------------------------------------
+                | 1️⃣ Submitted
+                |--------------------------------------------------------------------------
+                */
                 $statusTimeline[] = [
                     'stage' => 'Submitted',
                     'status' => 'submitted',
@@ -903,78 +1002,99 @@ class CreateRequestController extends Controller
                     'date' => $req->created_at?->format('Y-m-d'),
                 ];
 
-                /* ======================================================
-                 * 3. Withdraw handling (STOP lifecycle only)
-                 * ====================================================== */
-                if ($req->status === 'withdraw') {
+                /*
+                |--------------------------------------------------------------------------
+                | 2️⃣ Withdraw
+                |--------------------------------------------------------------------------
+                */
+                if ($req->status === ModelsRequest::WITHDRAW) {
                     $statusTimeline[] = [
                         'stage' => 'Withdrawn',
                         'status' => 'withdraw',
-                        'actor_name' => $req->userData?->name ?? 'Requester',
+                        'actor_name' => $req->userData?->name,
                         'date' => $req->updated_at?->format('Y-m-d'),
                     ];
-                } else {
 
-                    /* ==================================================
-                     * 4. Workflow approvals
-                     * ================================================== */
-                    $statusTimeline = array_merge($statusTimeline, $workflowTimeline);
+                    return $statusTimeline;
+                }
 
-                    /* ==================================================
-                     * 5. Document lifecycle
-                     * ================================================== */
-                    $doc = $req->requestDetailsDocuments;
+                /*
+                |--------------------------------------------------------------------------
+                | 3️⃣ Workflow Steps
+                |--------------------------------------------------------------------------
+                */
+                foreach ($workflowTimeline as $step) {
+                    $statusTimeline[] = $step;
+                }
 
-                    if ($doc?->is_po_created) {
-                        $statusTimeline[] = [
-                            'stage' => 'PO Created',
-                            'status' => 'po created',
-                            'actor_name' => $req->userData?->name,
-                            'date' => $doc->po_date,
-                        ];
-                    }
+                /*
+                |--------------------------------------------------------------------------
+                | 4️⃣ PO Created
+                |--------------------------------------------------------------------------
+                */
+                if ($req->poDetails) {
+                    $statusTimeline[] = [
+                        'stage' => 'PO Created',
+                        'status' => 'po created',
+                        'actor_name' => $req->poDetails->createdBy?->name ?? 'System',
+                        'date' => \Carbon\Carbon::parse($req->poDetails->po_date)->format('Y-m-d'),
+                    ];
+                }
 
-                    if ($doc?->is_delivery_completed) {
-                        $statusTimeline[] = [
-                            'stage' => 'Delivery Completed',
-                            'status' => 'delivery completed',
-                            'actor_name' => $req->userData?->name,
-                            'date' => $doc->delivery_completed_date,
-                        ];
-                    }
+                /*
+                |--------------------------------------------------------------------------
+                | 5️⃣ Delivery Completed
+                |--------------------------------------------------------------------------
+                */
+                foreach ($req->deliveries as $delivery) {
+                    $statusTimeline[] = [
+                        'stage' => 'Delivery Completed',
+                        'status' => 'delivery completed',
+                        'actor_name' => 'System',
+                        'date' => \Carbon\Carbon::parse($delivery->delivery_date)->format('Y-m-d'),
+                    ];
+                }
 
-                    if ($doc?->is_payment_completed) {
-                        $statusTimeline[] = [
-                            'stage' => 'Payment Completed',
-                            'status' => 'payment completed',
-                            'actor_name' => $req->userData?->name,
-                            'date' => $doc->payment_completed_date,
-                        ];
-                    }
+                /*
+                |--------------------------------------------------------------------------
+                | 6️⃣ Payment Completed
+                |--------------------------------------------------------------------------
+                */
+                foreach ($req->payments as $payment) {
+                    $statusTimeline[] = [
+                        'stage' => 'Payment Completed',
+                        'status' => 'payment completed',
+                        'actor_name' => 'System',
+                        'date' => \Carbon\Carbon::parse($payment->payment_date)->format('Y-m-d'),
+                    ];
+                }
 
-                    /* ==================================================
-                     * 6. Supplier Rating
-                     * ================================================== */
-                    if ($req->supplierRating) {
-                        $statusTimeline[] = [
-                            'stage' => 'Supplier Rated',
-                            'status' => 'supplier rated',
-                            'actor_name' => $req->userData?->name,
-                            'date' => $req->supplierRating->created_at?->format('Y-m-d'),
-                        ];
-                    }
+                /*
+                |--------------------------------------------------------------------------
+                | 7️⃣ Supplier Rated
+                |--------------------------------------------------------------------------
+                */
+                if ($req->supplierRating) {
+                    $statusTimeline[] = [
+                        'stage' => 'Supplier Rated',
+                        'status' => 'supplier rated',
+                        'actor_name' => $req->supplierRating->user?->name ?? 'Requester',
+                        'date' => $req->supplierRating->created_at?->format('Y-m-d'),
+                    ];
+                }
 
-                    /* ==================================================
-                     * 7. Closed
-                     * ================================================== */
-                    if ($req->status === 'closed') {
-                        $statusTimeline[] = [
-                            'stage' => 'Closed',
-                            'status' => 'closed',
-                            'actor_name' => 'System',
-                            'date' => $req->updated_at?->format('Y-m-d'),
-                        ];
-                    }
+                /*
+                |--------------------------------------------------------------------------
+                | 8️⃣ Closed
+                |--------------------------------------------------------------------------
+                */
+                if ($req->status === ModelsRequest::CLOSED) {
+                    $statusTimeline[] = [
+                        'stage' => 'Closed',
+                        'status' => 'closed',
+                        'actor_name' => 'System',
+                        'date' => $req->updated_at?->format('Y-m-d'),
+                    ];
                 }
 
                 $finalStatus = $req->getFinalStatus();
@@ -982,6 +1102,30 @@ class CreateRequestController extends Controller
                 /* ======================================================
                  * 8. Final response (NOTHING REMOVED)
                  * ====================================================== */
+
+                $isBehalf = $req->behalf_of == 1;
+
+                // Pick correct department ID
+                $departmentId = $isBehalf
+                    ? $req->behalf_of_department
+                    : $req->department;
+
+                // Pick correct budget code ID
+                $budgetCodeId = $isBehalf
+                    ? $req->behalf_of_buget_code
+                    : $req->budget_code;
+
+                // Fetch from SAME tables
+                $department = Department::find($departmentId);
+                $budget = BudgetCode::find($budgetCodeId);
+                // Supplier
+                $supplier = $req->supplier;
+
+                // Expected Date (formatted Y-m-d)
+                $expectedDate = $req->expected_date
+                    ? \Carbon\Carbon::parse($req->expected_date)->format('Y-m-d')
+                    : null;
+
                 return [
                     'id' => $req->id,
                     'request_id' => $req->request_id,
@@ -1014,14 +1158,28 @@ class CreateRequestController extends Controller
                         'name' => $req->requestTypeData?->name,
                     ],
                     'department' => [
-                        'id' => $req->department,
-                        'name' => $req->departmentData?->name,
+                        'id' => $department?->id,
+                        'name' => $department?->name,
+                        'budget_code' => $budget?->code ?? $budget?->name,
+                        'type' => $isBehalf ? 'behalf' : 'self',
                     ],
+                    // 'department' => [
+                    //     'id' => $req->department,
+                    //     'name' => $req->departmentData?->name,
+                    // ],
                     'supplier' => [
                         'id' => $req->supplier_id,
                         'name' => $req->supplierData?->name,
                     ],
 
+                    'expected_date' => $expectedDate,
+
+                    // 'supplier' => $supplier ? [
+                    //     'id' => $supplier->id,
+                    //     'name' => $supplier->name,
+                    //     'email' => $supplier->email ?? null,
+                    //     'phone' => $supplier->phone ?? null,
+                    // ] : null,
                     'workflow_history' => $workflowTimeline,
                     'status_timeline' => $statusTimeline,
 
@@ -1031,11 +1189,48 @@ class CreateRequestController extends Controller
                         'url' => asset('storage/requestdocuments/'.$doc->document),
                     ]),
 
+                    'po_amount' => $req->poDetails?->po_amount ?? 0,
+                    'total_paid' => $req->payments()->sum('payment_amount') ?? 0,
+
                     'status_flags' => [
-                        'is_po_created' => $doc?->is_po_created ?? 0,
-                        'is_delivery_completed' => $doc?->is_delivery_completed ?? 0,
-                        'is_payment_completed' => $doc?->is_payment_completed ?? 0,
+                        'is_po_created' => $req->poDetails()->exists() ? 1 : 0,
+                        'is_delivery_completed' => $req->deliveries()->exists() ? 1 : 0,
+                        'is_payment_completed' => $req->payments()->exists() ? 1 : 0,
                     ],
+
+                    /* ================= DOCUMENT DETAILS ================= */
+
+                    'po_details' => $req->poDetails ? [
+                        'number' => $req->poDetails->po_number,
+                        'date' => $req->poDetails->po_date,
+                        'amount' => $req->poDetails->po_amount,
+                        'file' => $req->poDetails->po_documents
+                        ? asset('storage/request_documents/'.$req->poDetails->po_documents)
+                        : null,
+                    ] : null,
+
+                    'delivery_details' => $req->deliveries->map(function ($delivery) {
+                        return [
+                            'number' => $delivery->delivery_number,
+                            'date' => $delivery->delivery_date,
+                            'quantity' => $delivery->delivery_quantity,
+                            'file' => $delivery->delivery_documents
+                                ? asset('storage/request_documents/'.$delivery->delivery_documents)
+                                : null,
+                        ];
+                    }),
+
+                    'payment_details' => $req->payments->map(function ($payment) {
+                        return [
+                            'number' => $payment->payment_number,
+                            'date' => $payment->payment_date,
+                            'amount' => $payment->payment_amount,
+                            'file' => $payment->payment_documents
+                                ? asset('storage/request_documents/'.$payment->payment_documents)
+                                : null,
+                        ];
+                    }),
+
                 ];
             });
 
@@ -1076,6 +1271,9 @@ class CreateRequestController extends Controller
 
                 'requestDetailsDocuments',
                 'supplierRating',
+                'poDetails',
+                'deliveries',
+                'payments',
             ])
                 ->where(function ($q) use ($id) {
                     $q->where('id', $id)            // numeric DB id
@@ -1098,7 +1296,7 @@ class CreateRequestController extends Controller
                                 ? 'approved'
                                 : 'rejected',
                             'date' => optional($actionTaken->max('updated_at'))->format('Y-m-d'),
-                            'remark' => $actionTaken->pluck('remarks')->filter()->implode(' | '),
+                            'remark' => $actionTaken->pluck('remark')->filter()->implode(' | '),
                         ];
                     }
 

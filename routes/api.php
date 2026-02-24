@@ -35,6 +35,20 @@ Route::post('admin/login', [LoginController::class, 'login']);
 Route::post('password/forgot', [PasswordResetContrller::class, 'sendResetLink']);
 Route::post('password/reset', [PasswordResetContrller::class, 'reset']);
 
+// Route::get('/login/azure', '\RootInc\LaravelAzureMiddleware\Azure@azure')
+//     ->name('azure.login');
+
+// Route::get('/login/azurecallback', [AuthController::class, 'azurecallback'])
+//     ->name('azure.callback');
+
+// Route::get('/login/azure', '\App\Http\Middleware\AppAzure@azure')
+//     ->name('azure.login');
+// Route::get('/azure/callback', '\App\Http\Middleware\AppAzure@azurecallback')
+//     ->name('azure.callback');
+
+// Route::get('/logout/azure', '\App\Http\Middleware\AppAzure@azurelogout')
+//     ->name('azure.logout');
+
 // Need to configure
 Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
 Route::get('request_type/{id}/document', action: [DocumentController::class, 'getDocumentsByRequestType']);

@@ -31,6 +31,148 @@ class Request extends Model
         'status',
     ];
 
+    public const DRAFT = 'draft';
+
+    public const SUBMITTED = 'submitted';
+
+    public const WITHDRAW = 'withdraw';
+
+    public const IN_APPROVAL = 'in_approval';
+
+    public const APPROVE = 'approved';
+
+    public const REJECT = 'reject';
+
+    public const PO_CREATED = 'po_created';
+
+    public const DELIVERY_COMPLETED = 'delivery_completed';
+
+    public const PAYMENT_COMPLETED = 'payment_completed';
+
+    public const SUPPLIER_RATING = 'supplier_rating';
+
+    public const CLOSED = 'closed';
+
+    public function recalculateStatus()
+    {
+        if (in_array($this->status, [
+            self::CLOSED,
+            self::WITHDRAW,
+            self::REJECT,
+        ])) {
+            return;
+        }
+
+        $steps = $this->workflowDetails()->get();
+
+        if ($steps->isEmpty()) {
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 1️⃣ REJECT
+        |--------------------------------------------------------------------------
+        */
+        if ($steps->contains('status', 'rejected')) {
+            $this->changeStatus(self::REJECT);
+
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 2️⃣ IN APPROVAL (MIXED)
+        |--------------------------------------------------------------------------
+        */
+        if (
+            $steps->contains('status', 'approved') &&
+            $steps->contains('status', 'pending')
+        ) {
+            $this->changeStatus(self::IN_APPROVAL);
+
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 3️⃣ SUBMITTED (ALL PENDING)
+        |--------------------------------------------------------------------------
+        */
+        if ($steps->every(fn ($s) => $s->status === 'pending')) {
+            $this->changeStatus(self::SUBMITTED);
+
+            return;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | 4️⃣ FULLY APPROVED
+        |--------------------------------------------------------------------------
+        */
+        if ($steps->every(fn ($s) => $s->status === 'approved')) {
+
+            if (! $this->poDetails()->exists()) {
+                $this->changeStatus(self::APPROVE);
+
+                return;
+            }
+
+            if (! $this->deliveries()
+                ->where('is_delivery_completed', 1)
+                ->exists()) {
+
+                $this->changeStatus(self::PO_CREATED);
+
+                return;
+            }
+
+            // Delivery completed but payment not completed
+            if (! $this->payments()
+                ->where('is_payment_completed', 1)
+                ->exists()) {
+
+                $this->changeStatus(self::DELIVERY_COMPLETED);
+
+                return;
+            }
+
+            // Payment completed but rating not done
+            if (! $this->supplierRating()->exists()) {
+
+                $this->changeStatus(self::PAYMENT_COMPLETED);
+
+                return;
+            }
+
+            // Everything done
+            $this->changeStatus(self::SUPPLIER_RATING);
+
+            return;
+        }
+    }
+
+    public function poDetails()
+    {
+        return $this->hasOne(PoUploadDetalils::class, 'request_id', 'request_id');
+    }
+
+    public function deliveries()
+    {
+        return $this->hasMany(DeliveryOrerDetails::class, 'request_id', 'request_id');
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(PaymentDetails::class, 'request_id', 'request_id');
+    }
+
+    public function changeStatus($newStatus)
+    {
+        $this->update([
+            'status' => $newStatus,
+        ]);
+    }
     // public function currentWorkflowRole()
     // {
     //     return $this->hasOne(RequestWorkflowDetails::class, 'request_id', 'request_id')

@@ -15,7 +15,9 @@ class BudgetController extends Controller
     /**
      * View budgets (both Admin and Entity)
      */
-    private const UTILIZED_STATUSES = ['approved', 'closed'];
+    private const HELD_STATUSES = ['submitted', 'in_approval'];
+
+    private const UTILIZED_STATUSES = ['approved', 'po_created', 'delivery_completed', 'payment_completed', 'supplier_rating', 'closed'];
 
     public function index(Request $request)
     {
@@ -111,76 +113,160 @@ class BudgetController extends Controller
         ]);
     }
 
+    // At the top of your controller class
 
     public function budgetSummary(Request $request)
     {
         $request->validate([
-            'entity_id'     => 'required|exists:entitis,id',
+            'entity_id' => 'required|exists:entitis,id',
             'department_id' => 'nullable|exists:departments,id',
-            'user_id'       => 'nullable|exists:users,id',
+            'user_id' => 'nullable|exists:users,id',
         ]);
 
-        $entityId     = $request->entity_id;
+        $entityId = $request->entity_id;
         $departmentId = $request->department_id;
-        $userId       = $request->user_id;
+        $userId = $request->user_id;
 
-        /** ---------------- ENTITY ---------------- */
+        /** ============================================================
+         *  HELPER: For utilized requests, use PO amount if exists,
+         *          otherwise fall back to request amount
+         * ============================================================ */
+        $getUtilizedSum = function ($query) {
+            // Join with po_upload_detalils to get PO amount where available
+            return $query
+                ->whereIn('status', self::UTILIZED_STATUSES)
+                ->get()
+                ->sum(function ($req) {
+                    $poAmount = \App\Models\PoUploadDetalils::where('request_id', $req->request_id)
+                        ->value('po_amount');
+
+                    return $poAmount !== null ? (float) $poAmount : (float) $req->amount;
+                });
+        };
+
+        /** ============================================================
+         *  ENTITY
+         * ============================================================ */
         $entity = Entiti::findOrFail($entityId);
 
-        $entityUtilized = ModelsRequest::where('entiti', $entityId)
-            ->whereIn('status', self::UTILIZED_STATUSES)
+        $entityBaseQuery = ModelsRequest::where('entiti', $entityId);
+
+        $entityUtilized = $getUtilizedSum(
+            ModelsRequest::where('entiti', $entityId)
+        );
+
+        $entityHeld = (float) ModelsRequest::where('entiti', $entityId)
+            ->whereIn('status', self::HELD_STATUSES)
             ->sum('amount');
 
-        /** ---------------- DEPARTMENT ---------------- */
+        $entityTotal = (float) $entity->budget;
+        $entityRemaining = max(0, $entityTotal - ($entityUtilized + $entityHeld));
+
+        /** ============================================================
+         *  DEPARTMENT
+         * ============================================================ */
         $departmentBudget = null;
 
         if ($departmentId) {
             $department = Department::findOrFail($departmentId);
 
-            $deptUtilized = ModelsRequest::where('entiti', $entityId)
+            $deptUtilized = $getUtilizedSum(
+                ModelsRequest::where('entiti', $entityId)
+                    ->where('department', $departmentId)
+            );
+
+            $deptHeld = (float) ModelsRequest::where('entiti', $entityId)
                 ->where('department', $departmentId)
-                ->whereIn('status', self::UTILIZED_STATUSES)
+                ->whereIn('status', self::HELD_STATUSES)
                 ->sum('amount');
 
+            $deptTotal = (float) $department->budget;
+            $deptRemaining = max(0, $deptTotal - ($deptUtilized + $deptHeld));
+
+            // Breakdown: count requests per status bucket
+            $deptRequestBreakdown = ModelsRequest::where('entiti', $entityId)
+                ->where('department', $departmentId)
+                ->whereNotIn('status', ['draft']) // exclude drafts
+                ->selectRaw('status, COUNT(*) as count, SUM(amount) as total_amount')
+                ->groupBy('status')
+                ->get();
+
             $departmentBudget = [
-                'total'     => (float) $department->budget,
-                'utilized'  => (float) $deptUtilized,
-                'remaining' => max(0, $department->budget - $deptUtilized),
+                'name' => $department->name,
+                'total' => $deptTotal,
+                'utilized' => $deptUtilized,
+                'held' => $deptHeld,
+                'remaining' => $deptRemaining,
+                'request_breakdown' => $deptRequestBreakdown->map(fn ($r) => [
+                    'status' => $r->status,
+                    'count' => $r->count,
+                    'total_amount' => (float) $r->total_amount,
+                    'bucket' => $this->getBucket($r->status),
+                ]),
             ];
         }
 
-        /** ---------------- USER ---------------- */
+        /** ============================================================
+         *  USER (LOA-based)
+         * ============================================================ */
         $userBudget = null;
 
         if ($userId) {
             $user = User::findOrFail($userId);
 
-            $userUtilized = ModelsRequest::where('entiti', $entityId)
+            $userUtilized = $getUtilizedSum(
+                ModelsRequest::where('entiti', $entityId)
+                    ->where('user', $userId)
+            );
+
+            $userHeld = (float) ModelsRequest::where('entiti', $entityId)
                 ->where('user', $userId)
-                ->whereIn('status', self::UTILIZED_STATUSES)
+                ->whereIn('status', self::HELD_STATUSES)
                 ->sum('amount');
 
+            $userLoa = (float) $user->loa;
+            $userRemaining = max(0, $userLoa - ($userUtilized + $userHeld));
+
             $userBudget = [
-                'loa'       => (float) $user->loa,
-                'utilized'  => (float) $userUtilized,
-                'remaining' => max(0, $user->loa - $userUtilized),
+                'name' => $user->name,
+                'loa' => $userLoa,
+                'utilized' => $userUtilized,
+                'held' => $userHeld,
+                'remaining' => $userRemaining,
             ];
         }
 
         return response()->json([
             'status' => 'success',
-            'data'   => [
+            'data' => [
                 'entity' => [
-                    'total'     => (float) $entity->budget,
-                    'utilized'  => (float) $entityUtilized,
-                    'remaining' => max(0, $entity->budget - $entityUtilized),
+                    'name' => $entity->name,
+                    'total' => $entityTotal,
+                    'utilized' => $entityUtilized,
+                    'held' => $entityHeld,
+                    'remaining' => $entityRemaining,
                 ],
                 'department' => $departmentBudget,
-                'user'       => $userBudget,
+                'user' => $userBudget,
             ],
+           
         ]);
     }
 
+    /** ============================================================
+     *  HELPER: label which bucket a status belongs to
+     * ============================================================ */
+    private function getBucket(string $status): string
+    {
+        if (in_array($status, self::HELD_STATUSES)) {
+            return 'held';
+        }
+        if (in_array($status, self::UTILIZED_STATUSES)) {
+            return 'utilized';
+        }
+
+        return 'excluded'; // draft, withdraw, reject
+    }
 
     /**
      * Super Admin only: Allocate budget to department

@@ -84,6 +84,7 @@ class DeprtmentController extends Controller
             $entity = Entiti::findOrFail($entitiId);
 
             $currentDepartmentBudget = Department::where('entiti_id', $entitiId)
+             ->where('department_code', '!=', 'ALL')
                 ->sum('budget');
 
             $requestedBudget = $request->budget ?? 0;

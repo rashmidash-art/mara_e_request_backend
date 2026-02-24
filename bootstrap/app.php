@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth' => \App\Http\Middleware\Authenticate::class,
             // 'role' => \App\Http\Middleware\RoleMiddleware::class,
             'permission' => \App\Http\Middleware\PermissionMiddleware::class,
+            'azure' => \App\Http\Middleware\AppAzure::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
