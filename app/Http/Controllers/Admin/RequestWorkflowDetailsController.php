@@ -5,8 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Request as ModelsRequest; // Eloquent model alias
 use App\Models\RequestWorkflowDetails;
-use App\Models\User;
-use App\Models\WorkflowRoleAssign;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -22,22 +21,22 @@ class RequestWorkflowDetailsController extends Controller
         $requests = ModelsRequest::whereHas('workflowUsers', function ($q) use ($userId) {
             $q->where('action_taken_by', $userId);
         })
-        ->with([
-            'userData',
-            'departmentData',
-            'workflowUsers' => function ($q) use ($userId) {
-                $q->where('action_taken_by', $userId)
-                  ->latest('updated_at')
-                  ->limit(1)
-                  ->with(['assignedUser', 'role', 'workflowStep']);
-            },
-            'requestDetailsDocuments',
-            'supplierData',
-            'requestTypeData',
-            'categoryData',
-        ])
-        ->orderBy('updated_at', 'desc')
-        ->get();
+            ->with([
+                'userData',
+                'departmentData',
+                'workflowUsers' => function ($q) use ($userId) {
+                    $q->where('action_taken_by', $userId)
+                        ->latest('updated_at')
+                        ->limit(1)
+                        ->with(['assignedUser', 'role', 'workflowStep']);
+                },
+                'requestDetailsDocuments',
+                'supplierData',
+                'requestTypeData',
+                'categoryData',
+            ])
+            ->orderBy('updated_at', 'desc')
+            ->get();
 
         $data = $requests->map(function ($request) {
             $lastActionByUser = $request->workflowUsers->first();
@@ -138,7 +137,40 @@ class RequestWorkflowDetailsController extends Controller
                     'remark' => $request->remark,
                     'action_taken_by' => $user->id,
                 ]);
+
+                // For AND logic, notify requestor only after all assigned users approve
+                if ($logic === 'and') {
+                    $pendingApprovals = RequestWorkflowDetails::where('request_id', $request_id)
+                        ->where('workflow_step_id', $current->workflow_step_id)
+                        ->where('status', 'pending')
+                        ->count();
+
+                    if ($pendingApprovals === 0) {
+                        NotificationService::send(
+                            $requestData->user,
+                            'Request Approved',
+                            "Your request {$requestData->request_id} has been approved by all assigned approvers.",
+                            'request_approved',
+                            $requestData->request_id,
+                            'request',
+                            'Workflow approval'
+                        );
+                    }
+                } else {
+                    // single logic
+                    NotificationService::send(
+                        $requestData->user,
+                        'Request Approved',
+                        "Your request {$requestData->request_id} has been approved by {$user->name}.",
+                        'request_approved',
+                        $requestData->request_id,
+                        'request',
+                        'Workflow approval'
+                    );
+                }
+
             } elseif ($logic === 'or') {
+                // OR logic: notify requestor immediately
                 RequestWorkflowDetails::where('request_id', $request_id)
                     ->where('workflow_step_id', $current->workflow_step_id)
                     ->update([
@@ -146,13 +178,22 @@ class RequestWorkflowDetailsController extends Controller
                         'remark' => $request->remark,
                         'action_taken_by' => $user->id,
                     ]);
+
+                NotificationService::send(
+                    $requestData->user,
+                    'Request Approved',
+                    "Your request {$requestData->request_id} has been approved by {$user->name}.",
+                    'request_approved',
+                    $requestData->request_id,
+                    'request',
+                    'Workflow approval'
+                );
             }
 
             $this->syncRequestStatus($request_id);
 
             return response()->json(['status' => 'success', 'message' => 'Approved successfully']);
         }
-
         // ------------------ REJECT ------------------ //
         if ($request->action === 'reject') {
             RequestWorkflowDetails::where('request_id', $request_id)
@@ -166,6 +207,16 @@ class RequestWorkflowDetailsController extends Controller
                 ]);
 
             $this->syncRequestStatus($request_id);
+            // --- NOTIFY REQUESTOR ---
+            NotificationService::send(
+                $requestData->user,
+                'Request Rejected',
+                "Your request {$requestData->request_id} has been rejected by {$user->name}.",
+                'request_rejected',
+                $requestData->request_id,
+                'request',
+                'Workflow rejection'
+            );
 
             return response()->json(['status' => 'success', 'message' => 'Rejected successfully']);
         }
@@ -186,6 +237,27 @@ class RequestWorkflowDetailsController extends Controller
 
             if ($previousStep) {
                 $previousStep->update(['status' => 'pending']);
+
+                NotificationService::send(
+                    $previousStep->assigned_user_id,
+                    'Request Sent Back',
+                    "Request {$requestData->request_id} has been sent back by {$user->name}. Remark: {$request->remark}",
+                    'request_sendback',
+                    $requestData->request_id,
+                    'request',
+                    'Workflow sendback'
+                );
+
+            } else {
+                NotificationService::send(
+                    $requestData->user,
+                    'Request Sent Back',
+                    "Your request {$requestData->request_id} has been sent back by {$user->name}. Remark: {$request->remark}",
+                    'request_sendback',
+                    $requestData->request_id,
+                    'request',
+                    'Workflow sendback'
+                );
             }
 
             $this->syncRequestStatus($request_id);
@@ -200,31 +272,37 @@ class RequestWorkflowDetailsController extends Controller
     private function syncRequestStatus(string $requestId)
     {
         $req = ModelsRequest::where('request_id', $requestId)->first();
-        if (! $req) return;
+        if (! $req) {
+            return;
+        }
 
         $steps = RequestWorkflowDetails::where('request_id', $requestId)->get();
 
         // If any rejected → rejected
         if ($steps->contains('status', 'rejected')) {
             $req->update(['status' => 'rejected']);
+
             return;
         }
 
         // If all pending → submitted
-        if ($steps->every(fn($s) => $s->status === 'pending')) {
+        if ($steps->every(fn ($s) => $s->status === 'pending')) {
             $req->update(['status' => 'submitted']);
+
             return;
         }
 
         // If some approved & some pending → in_approval
         if ($steps->contains('status', 'approved') && $steps->contains('status', 'pending')) {
             $req->update(['status' => 'in_approval']);
+
             return;
         }
 
         // If all approved → approved
-        if ($steps->every(fn($s) => $s->status === 'approved')) {
+        if ($steps->every(fn ($s) => $s->status === 'approved')) {
             $req->update(['status' => 'approve']);
+
             return;
         }
     }

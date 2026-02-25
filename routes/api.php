@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\EntityRequestTypeController;
 use App\Http\Controllers\Admin\EscalationController;
 use App\Http\Controllers\Admin\FileFormatController;
 use App\Http\Controllers\Admin\ManagerController;
+use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\RequestTypeController;
 use App\Http\Controllers\Admin\RequestWorkflowDetailsController;
 use App\Http\Controllers\Admin\RoleController;
@@ -27,6 +28,7 @@ use App\Http\Controllers\Admin\WorkFlowStepsController;
 use App\Http\Controllers\Admin\WorkFlowTypeController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetContrller;
+use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -89,6 +91,10 @@ Route::middleware('auth:api,entiti-api')->group(function () {
             'entity/{entityId}/category/{categoryId}/supplier',
             [SupplierController::class, 'getSupplierbyEntityandCatrhory']
         );
+
+        Route::apiResource('notification', NotificationController::class);
+        Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']); // mark read
+        Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']); // unread count
 
         // Route::get('/requestDetails', [CreateRequestController::class, 'requestDetailsAll']);
 

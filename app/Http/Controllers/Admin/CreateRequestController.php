@@ -19,6 +19,7 @@ use App\Models\User;
 use App\Models\WorkFlow;
 use App\Models\WorkflowRoleAssign;
 use App\Models\WorkflowStep;
+use App\Services\NotificationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -409,8 +410,19 @@ class CreateRequestController extends Controller
                                 'approval_logic' => strtolower($roleAssign->approval_logic),
                                 'is_sendback' => 0,
                             ]);
+                            // ----------------- CREATE NOTIFICATION -----------------
+                            NotificationService::send(
+                                $user->id,
+                                'New Request Assigned',
+                                "You have been assigned a new request {$req->request_id} to approve.",
+                                'request_assigned',
+                                $req->request_id,
+                                'request',
+                                'Workflow assignment'
+                            );
                         }
                     } else {
+                        $assignedUser = $users->first();
                         RequestWorkflowDetails::create([
                             'request_id' => $req->request_id,
                             'workflow_id' => $workflow->id,
@@ -421,6 +433,17 @@ class CreateRequestController extends Controller
                             'approval_logic' => strtolower($roleAssign->approval_logic),
                             'is_sendback' => 0,
                         ]);
+
+                        // ----------------- CREATE NOTIFICATION -----------------
+                        NotificationService::send(
+                            $assignedUser->id,
+                            'New Request Assigned',
+                            "Request {$req->request_id} has been assigned to you for approval.",
+                            'workflow_assigned',
+                            $req->request_id,
+                            'request',
+                            'Assigned via workflow step '.$step->order_id
+                        );
                     }
                 }
             }
