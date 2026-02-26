@@ -367,7 +367,8 @@ class CreateRequestController extends Controller
                 ->orderBy('order_id')
                 ->get();
 
-            foreach ($steps as $step) {
+            // foreach ($steps as $step) {
+            foreach ($steps as $stepIndex => $step) {
 
                 $roleAssigns = WorkflowRoleAssign::where('workflow_id', $workflow->id)
                     ->where('step_id', $step->id)

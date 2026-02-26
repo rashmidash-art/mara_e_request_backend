@@ -249,7 +249,7 @@ class BudgetController extends Controller
                 'department' => $departmentBudget,
                 'user' => $userBudget,
             ],
-           
+
         ]);
     }
 
