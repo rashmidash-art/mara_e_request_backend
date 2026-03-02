@@ -272,25 +272,48 @@ class Request extends Model
         return $this->hasOne(SupplierRating::class, 'request_id', 'request_id');
     }
 
+    public function hasPoCreated()
+    {
+        return $this->poDetails()->exists();
+    }
+
+    public function hasDeliveryCompleted()
+    {
+        return $this->deliveries()
+            ->where('is_delivery_completed', 1)
+            ->exists();
+    }
+
+    public function hasPaymentCompleted()
+    {
+        return $this->payments()
+            ->where('is_payment_completed', 1)
+            ->exists();
+    }
+
+    public function hasSupplierRated()
+    {
+        return $this->supplierRating()->exists();
+    }
+
     public function getFinalStatus()
     {
-        // Step 1-5: Workflow statuses
-
-        if ($this->status === 'closed') {
+        // 1️⃣ Closed / Draft / Withdraw (direct states)
+        if ($this->status === self::CLOSED) {
             return [
                 'final_status' => 'Closed',
                 'pending_by' => 'Completed',
             ];
         }
 
-        if ($this->status === 'draft') {
+        if ($this->status === self::DRAFT) {
             return [
                 'final_status' => 'Draft',
                 'pending_by' => 'Request Submission',
             ];
         }
 
-        if ($this->status === 'withdraw') {
+        if ($this->status === self::WITHDRAW) {
             return [
                 'final_status' => 'Withdrawn',
                 'pending_by' => 'Withdrawn',
@@ -299,6 +322,7 @@ class Request extends Model
 
         $steps = $this->workflowUsers()->get();
 
+        // 2️⃣ Rejected
         if ($steps->contains('status', 'rejected')) {
             return [
                 'final_status' => 'Rejected',
@@ -306,6 +330,7 @@ class Request extends Model
             ];
         }
 
+        // 3️⃣ Submitted
         if ($steps->every(fn ($s) => $s->status === 'pending')) {
             return [
                 'final_status' => 'Submitted',
@@ -313,6 +338,7 @@ class Request extends Model
             ];
         }
 
+        // 4️⃣ In Approval
         if (
             $steps->contains('status', 'approved') &&
             $steps->contains('status', 'pending')
@@ -323,46 +349,43 @@ class Request extends Model
             ];
         }
 
+        // 5️⃣ Fully Approved → Now calculate from real tables
         if ($steps->isNotEmpty() && $steps->every(fn ($s) => $s->status === 'approved')) {
-            // Workflow approved — now check document status
-            $doc = $this->requestDetailsDocuments; // Make sure relation is defined
 
-            if ($doc) {
-                if ($doc->is_payment_completed == 1) {
-                    return [
-                        'final_status' => 'Payment Completed',
-                        'pending_by' => 'Payment Completed',
-                    ];
-                }
-
-                if ($doc->is_delivery_completed == 1) {
-                    return [
-                        'final_status' => 'Delivery Completed',
-                        'pending_by' => 'Upload Payment',
-                    ];
-                }
-
-                if ($doc->is_po_created == 1) {
-                    return [
-                        'final_status' => 'PO Created',
-                        'pending_by' => 'Upload Delivery',
-                    ];
-                }
-
+            if (! $this->hasPoCreated()) {
                 return [
                     'final_status' => 'Approved',
                     'pending_by' => 'Upload PO',
                 ];
             }
 
-            // No documents yet
+            if (! $this->hasDeliveryCompleted()) {
+                return [
+                    'final_status' => 'PO Created',
+                    'pending_by' => 'Upload Delivery',
+                ];
+            }
+
+            if (! $this->hasPaymentCompleted()) {
+                return [
+                    'final_status' => 'Delivery Completed',
+                    'pending_by' => 'Upload Payment',
+                ];
+            }
+
+            if (! $this->hasSupplierRated()) {
+                return [
+                    'final_status' => 'Payment Completed',
+                    'pending_by' => 'Rate Supplier',
+                ];
+            }
+
             return [
-                'final_status' => 'Approved',
-                'pending_by' => 'Upload PO',
+                'final_status' => 'Supplier Rated',
+                'pending_by' => 'Completed',
             ];
         }
 
-        // fallback
         return [
             'final_status' => ucfirst($this->status),
             'pending_by' => null,

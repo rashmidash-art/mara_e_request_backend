@@ -1001,7 +1001,8 @@ class CreateRequestController extends Controller
                             'role' => $steps->pluck('role.name')->unique()->join(', '),
                             'assigned_user' => $lastAction?->assignedUser?->name,
                             'status' => $lastAction?->status ?? 'pending',
-                            'date' => $lastAction?->updated_at?->format('Y-m-d'),
+                            // 'date' => $lastAction?->updated_at?->format('Y-m-d'),
+                            'date' => $lastAction?->updated_at?->format('Y-m-d H:i'),
                         ];
                     })
                     ->values()
