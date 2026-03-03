@@ -93,6 +93,263 @@ class RequestWorkflowDetailsController extends Controller
     /**
      * Take workflow action (approve/reject/sendback)
      */
+    // public function takeAction(Request $request, $request_id)
+    // {
+    //     $validated = $request->validate([
+    //         'action' => 'required|in:approve,reject,sendback',
+    //         'remark' => 'nullable|string',
+    //     ]);
+
+    //     $user = Auth::user();
+    //     if (! $user) {
+    //         return response()->json(['status' => 'error', 'message' => 'Unauthenticated'], 401);
+    //     }
+
+    //     $current = RequestWorkflowDetails::where('request_id', $request_id)
+    //         ->where('assigned_user_id', $user->id)
+    //         ->where('status', 'pending')
+    //         ->first();
+
+    //     if (! $current) {
+    //         return response()->json(['status' => 'error', 'message' => 'No pending workflow for you'], 403);
+    //     }
+
+    //     $logic = strtolower($current->approval_logic); // single / or / and
+    //     $requestData = ModelsRequest::where('request_id', $request_id)->first();
+
+    //     if (! $requestData) {
+    //         return response()->json(['status' => 'error', 'message' => 'Request not found'], 404);
+    //     }
+
+    //     // ------------------ APPROVE ------------------ //
+    //     if ($request->action === 'approve') {
+
+    //         if ($requestData->amount > $user->loa) {
+    //             return response()->json([
+    //                 'status' => 'error',
+    //                 'message' => 'You cannot approve: LOA too low',
+    //             ], 403);
+    //         }
+
+    //         if ($logic === 'single' || $logic === 'and') {
+    //             $current->update([
+    //                 'status' => 'approved',
+    //                 'remark' => $request->remark,
+    //                 'action_taken_by' => $user->id,
+    //             ]);
+
+    //             // For AND logic, notify requestor only after all assigned users approve
+    //             if ($logic === 'and') {
+    //                 $pendingApprovals = RequestWorkflowDetails::where('request_id', $request_id)
+    //                     ->where('workflow_step_id', $current->workflow_step_id)
+    //                     ->where('status', 'pending')
+    //                     ->count();
+
+    //                 if ($pendingApprovals === 0) {
+    //                     NotificationService::send(
+    //                         $requestData->user,
+    //                         'Request Approved',
+    //                         "Your request {$requestData->request_id} has been approved by all assigned approvers.",
+    //                         'request_approved',
+    //                         $requestData->request_id,
+    //                         'request',
+    //                         'Workflow approval'
+    //                     );
+    //                 }
+    //             } else {
+    //                 // single logic
+    //                 NotificationService::send(
+    //                     $requestData->user,
+    //                     'Request Approved',
+    //                     "Your request {$requestData->request_id} has been approved by {$user->name}.",
+    //                     'request_approved',
+    //                     $requestData->request_id,
+    //                     'request',
+    //                     'Workflow approval'
+    //                 );
+    //             }
+
+    //         } elseif ($logic === 'or') {
+    //             // OR logic: notify requestor immediately
+    //             RequestWorkflowDetails::where('request_id', $request_id)
+    //                 ->where('workflow_step_id', $current->workflow_step_id)
+    //                 ->update([
+    //                     'status' => 'approved',
+    //                     'remark' => $request->remark,
+    //                     'action_taken_by' => $user->id,
+    //                 ]);
+
+    //             NotificationService::send(
+    //                 $requestData->user,
+    //                 'Request Approved',
+    //                 "Your request {$requestData->request_id} has been approved by {$user->name}.",
+    //                 'request_approved',
+    //                 $requestData->request_id,
+    //                 'request',
+    //                 'Workflow approval'
+    //             );
+    //         }
+
+    //         $this->syncRequestStatus($request_id);
+
+    //         return response()->json(['status' => 'success', 'message' => 'Approved successfully']);
+    //     }
+    //     // ------------------ REJECT ------------------ //
+    //     if ($request->action === 'reject') {
+    //         RequestWorkflowDetails::where('request_id', $request_id)
+    //             ->where('workflow_step_id', $current->workflow_step_id)
+    //             ->update([
+    //                 'status' => 'rejected',
+    //                 'remark' => $request->remark,
+    //                 'action_taken_by' => $user->id,
+    //                 'is_sendback' => 0,
+    //                 'sendback_remark' => null,
+    //             ]);
+
+    //         $this->syncRequestStatus($request_id);
+    //         // --- NOTIFY REQUESTOR ---
+    //         NotificationService::send(
+    //             $requestData->user,
+    //             'Request Rejected',
+    //             "Your request {$requestData->request_id} has been rejected by {$user->name}.",
+    //             'request_rejected',
+    //             $requestData->request_id,
+    //             'request',
+    //             'Workflow rejection'
+    //         );
+
+    //         return response()->json(['status' => 'success', 'message' => 'Rejected successfully']);
+    //     }
+
+    //     // ------------------ SENDBACK ------------------ //
+
+    //     // if ($request->action === 'sendback') {
+
+    //     //     $current->update([
+    //     //         'is_sendback' => 1,
+    //     //         'sendback_remark' => $request->remark,
+    //     //         'remark' => null,
+    //     //         'action_taken_by' => $user->id,
+    //     //     ]);
+
+    //     //     $previousStep = RequestWorkflowDetails::where('request_id', $request_id)
+    //     //         ->where('workflow_step_id', '<', $current->workflow_step_id)
+    //     //         ->orderByDesc('workflow_step_id')
+    //     //         ->first();
+
+    //     //     if ($previousStep) {
+
+    //     //         // 🔹 If NOT first step → move back to previous approver
+    //     //         $previousStep->update(['status' => 'pending']);
+
+    //     //         NotificationService::send(
+    //     //             $previousStep->assigned_user_id,
+    //     //             'Request Sent Back',
+    //     //             "Request {$requestData->request_id} has been sent back by {$user->name}. Remark: {$request->remark}",
+    //     //             'request_sendback',
+    //     //             $requestData->request_id,
+    //     //             'request',
+    //     //             'Workflow sendback'
+    //     //         );
+
+    //     //     } else {
+
+    //     //         // 🔹 FIRST STEP → Update request table to DRAFT
+    //     //         $requestData->update([
+    //     //             'status' => 'draft',
+    //     //         ]);
+
+    //     //         NotificationService::send(
+    //     //             $requestData->user,
+    //     //             'Request Sent Back to Draft',
+    //     //             "Your request {$requestData->request_id} has been sent back to draft by {$user->name}. Remark: {$request->remark}",
+    //     //             'request_sendback',
+    //     //             $requestData->request_id,
+    //     //             'request',
+    //     //             'Workflow sendback to draft'
+    //     //         );
+    //     //     }
+
+    //     //     $this->syncRequestStatus($request_id);
+
+    //     //     return response()->json([
+    //     //         'status' => 'success',
+    //     //         'message' => 'Sent back successfully',
+    //     //     ]);
+    //     // }
+
+    //     if ($request->action === 'sendback') {
+    //         $current->update([
+    //             'is_sendback' => 1,
+    //             'sendback_remark' => $request->remark,
+    //             'remark' => null,
+    //             'action_taken_by' => $user->id,
+    //             'status' => 'sentback',
+    //         ]);
+
+    //         $previousStep = RequestWorkflowDetails::where('request_id', $request_id)
+    //             ->where('workflow_step_id', '<', $current->workflow_step_id)
+    //             ->orderByDesc('workflow_step_id')
+    //             ->first();
+
+    //         if ($previousStep) {
+    //             $previousStep->update(['status' => 'pending']);
+    //             NotificationService::send(
+    //                 $previousStep->assigned_user_id,
+    //                 'Request Sent Back',
+    //                 "Request {$requestData->request_id} has been sent back by {$user->name}. Remark: {$request->remark}",
+    //                 'request_sendback',
+    //                 $requestData->request_id,
+    //                 'request',
+    //                 'Workflow sendback'
+    //             );
+    //         } else {
+    //             // FIRST STEP → move request to draft
+    //             $requestData->update(['status' => 'draft']);
+
+    //             // Immediately delete all workflow details
+    //             RequestWorkflowDetails::where('request_id', $request_id)->delete();
+
+    //             NotificationService::send(
+    //                 $requestData->user,
+    //                 'Request Sent Back to Draft',
+    //                 "Your request {$requestData->request_id} has been sent back to draft by {$user->name}. Remark: {$request->remark}",
+    //                 'request_sendback',
+    //                 $requestData->request_id,
+    //                 'request',
+    //                 'Workflow sendback to draft'
+    //             );
+    //         }
+
+    //         $this->syncRequestStatus($request_id);
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'Sent back successfully',
+    //         ]);
+    //     }
+    // }
+
+    private function resetNextStepSendback(string $request_id, int $currentStepId): void
+    {
+        $nextStep = RequestWorkflowDetails::where('request_id', $request_id)
+            ->where('workflow_step_id', '>', $currentStepId)
+            ->orderBy('workflow_step_id', 'asc')
+            ->first();
+
+        if ($nextStep) {
+            //  Reset is_sendback AND status back to pending for ALL records in next step
+            RequestWorkflowDetails::where('request_id', $request_id)
+                ->where('workflow_step_id', $nextStep->workflow_step_id)
+                ->where('is_sendback', 1)
+                ->update([
+                    'is_sendback' => 0,
+                    'status' => 'pending',       //  restore so users can act again
+                    'action_taken_by' => null,   //  clear previous action
+                ]);
+        }
+    }
+
     public function takeAction(Request $request, $request_id)
     {
         $validated = $request->validate([
@@ -114,16 +371,41 @@ class RequestWorkflowDetailsController extends Controller
             return response()->json(['status' => 'error', 'message' => 'No pending workflow for you'], 403);
         }
 
-        $logic = strtolower($current->approval_logic); // single / or / and
         $requestData = ModelsRequest::where('request_id', $request_id)->first();
-
         if (! $requestData) {
             return response()->json(['status' => 'error', 'message' => 'Request not found'], 404);
         }
 
+        $logic = strtolower($current->approval_logic);
+
+        // ------------------ AUTO-APPROVE: entity mismatch ------------------ //
+        if ($current->assignedUser->entiti_id != $requestData->entiti && in_array($logic, ['single', 'and'])) {
+            $current->update([
+                'status' => 'approved',
+                'remark' => 'Auto-approved: assigned user entity mismatch',
+                'action_taken_by' => null,
+            ]);
+
+            $this->syncRequestStatus($request_id);
+
+            NotificationService::send(
+                $requestData->user,
+                'Request Auto-Approved',
+                "Your request {$requestData->request_id} has been auto-approved because the assigned user belongs to a different entity.",
+                'request_auto_approved',
+                $requestData->request_id,
+                'request',
+                'Workflow auto-approval'
+            );
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Step auto-approved due to different entity',
+            ]);
+        }
+
         // ------------------ APPROVE ------------------ //
         if ($request->action === 'approve') {
-
             if ($requestData->amount > $user->loa) {
                 return response()->json([
                     'status' => 'error',
@@ -131,14 +413,14 @@ class RequestWorkflowDetailsController extends Controller
                 ], 403);
             }
 
-            if ($logic === 'single' || $logic === 'and') {
+            if (in_array($logic, ['single', 'and'])) {
                 $current->update([
                     'status' => 'approved',
                     'remark' => $request->remark,
                     'action_taken_by' => $user->id,
                 ]);
 
-                // For AND logic, notify requestor only after all assigned users approve
+                //  After AND logic: check if all approved, then reset next step's sendback flags
                 if ($logic === 'and') {
                     $pendingApprovals = RequestWorkflowDetails::where('request_id', $request_id)
                         ->where('workflow_step_id', $current->workflow_step_id)
@@ -146,6 +428,9 @@ class RequestWorkflowDetailsController extends Controller
                         ->count();
 
                     if ($pendingApprovals === 0) {
+                        // Reset is_sendback on the next step
+                        $this->resetNextStepSendback($request_id, $current->workflow_step_id);
+
                         NotificationService::send(
                             $requestData->user,
                             'Request Approved',
@@ -157,7 +442,9 @@ class RequestWorkflowDetailsController extends Controller
                         );
                     }
                 } else {
-                    // single logic
+                    //  single logic: reset next step's sendback flags immediately
+                    $this->resetNextStepSendback($request_id, $current->workflow_step_id);
+
                     NotificationService::send(
                         $requestData->user,
                         'Request Approved',
@@ -170,7 +457,6 @@ class RequestWorkflowDetailsController extends Controller
                 }
 
             } elseif ($logic === 'or') {
-                // OR logic: notify requestor immediately
                 RequestWorkflowDetails::where('request_id', $request_id)
                     ->where('workflow_step_id', $current->workflow_step_id)
                     ->update([
@@ -178,6 +464,9 @@ class RequestWorkflowDetailsController extends Controller
                         'remark' => $request->remark,
                         'action_taken_by' => $user->id,
                     ]);
+
+                //  OR logic: reset next step's sendback flags
+                $this->resetNextStepSendback($request_id, $current->workflow_step_id);
 
                 NotificationService::send(
                     $requestData->user,
@@ -194,6 +483,7 @@ class RequestWorkflowDetailsController extends Controller
 
             return response()->json(['status' => 'success', 'message' => 'Approved successfully']);
         }
+
         // ------------------ REJECT ------------------ //
         if ($request->action === 'reject') {
             RequestWorkflowDetails::where('request_id', $request_id)
@@ -207,7 +497,7 @@ class RequestWorkflowDetailsController extends Controller
                 ]);
 
             $this->syncRequestStatus($request_id);
-            // --- NOTIFY REQUESTOR ---
+
             NotificationService::send(
                 $requestData->user,
                 'Request Rejected',
@@ -223,20 +513,28 @@ class RequestWorkflowDetailsController extends Controller
 
         // ------------------ SENDBACK ------------------ //
         if ($request->action === 'sendback') {
-            $current->update([
-                'is_sendback' => 1,
-                'sendback_remark' => $request->remark,
-                'remark' => null,
-                'action_taken_by' => $user->id,
-            ]);
+            //  Mark ALL records of current step as sentback (not just current user's)
+            RequestWorkflowDetails::where('request_id', $request_id)
+                ->where('workflow_step_id', $current->workflow_step_id)
+                ->update([
+                    'is_sendback' => 1,
+                    'sendback_remark' => $request->remark,
+                    'remark' => null,
+                    'action_taken_by' => $user->id,
+                    'status' => 'sentback',
+                ]);
 
+            // Find previous step
             $previousStep = RequestWorkflowDetails::where('request_id', $request_id)
                 ->where('workflow_step_id', '<', $current->workflow_step_id)
                 ->orderByDesc('workflow_step_id')
                 ->first();
 
             if ($previousStep) {
-                $previousStep->update(['status' => 'pending']);
+                //  Reset ALL records of the previous step back to pending
+                RequestWorkflowDetails::where('request_id', $request_id)
+                    ->where('workflow_step_id', $previousStep->workflow_step_id)
+                    ->update(['status' => 'pending', 'action_taken_by' => null]);
 
                 NotificationService::send(
                     $previousStep->assigned_user_id,
@@ -247,16 +545,18 @@ class RequestWorkflowDetailsController extends Controller
                     'request',
                     'Workflow sendback'
                 );
-
             } else {
+                $requestData->update(['status' => 'draft']);
+                RequestWorkflowDetails::where('request_id', $request_id)->delete();
+
                 NotificationService::send(
                     $requestData->user,
-                    'Request Sent Back',
-                    "Your request {$requestData->request_id} has been sent back by {$user->name}. Remark: {$request->remark}",
+                    'Request Sent Back to Draft',
+                    "Your request {$requestData->request_id} has been sent back to draft by {$user->name}. Remark: {$request->remark}",
                     'request_sendback',
                     $requestData->request_id,
                     'request',
-                    'Workflow sendback'
+                    'Workflow sendback to draft'
                 );
             }
 
@@ -278,28 +578,31 @@ class RequestWorkflowDetailsController extends Controller
 
         $steps = RequestWorkflowDetails::where('request_id', $requestId)->get();
 
-        // If any rejected → rejected
+        if ($steps->isEmpty()) {
+            // If no workflow steps exist, set to draft
+            $req->update(['status' => 'draft']);
+
+            return;
+        }
+
         if ($steps->contains('status', 'rejected')) {
             $req->update(['status' => 'rejected']);
 
             return;
         }
 
-        // If all pending → submitted
         if ($steps->every(fn ($s) => $s->status === 'pending')) {
             $req->update(['status' => 'submitted']);
 
             return;
         }
 
-        // If some approved & some pending → in_approval
         if ($steps->contains('status', 'approved') && $steps->contains('status', 'pending')) {
             $req->update(['status' => 'in_approval']);
 
             return;
         }
 
-        // If all approved → approved
         if ($steps->every(fn ($s) => $s->status === 'approved')) {
             $req->update(['status' => 'approve']);
 

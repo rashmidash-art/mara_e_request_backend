@@ -53,7 +53,7 @@ class CreateRequestController extends Controller
                 'currentWorkflowRole.role:id,name',
                 'currentWorkflowRole.assignedUser:id,name',
                 'currentWorkflowRole.workflowStep:id,name',
-                // ✅ Add these
+                // Add these
                 'workflowHistory' => function ($q) {
                     $q->with(['role', 'assignedUser', 'workflowStep'])->orderBy('id', 'asc');
                 },
@@ -67,17 +67,23 @@ class CreateRequestController extends Controller
                 $requests = $query->where('entiti', $auth->id)->get();
             } else {
                 $userId = $auth->id;
+                $userEntityId = $auth->entiti_id;
+
                 $requests = $query
+                    ->where('entiti', $userEntityId)
                     ->whereHas('workflowDetails', function ($q) use ($userId) {
                         $q->where('assigned_user_id', $userId)
+                            ->where('status', 'pending') //  VERY IMPORTANT
+                            ->where('is_sendback', 0)
                             ->whereRaw('workflow_step_id = (
-                            SELECT workflow_step_id
-                            FROM request_workflow_details rwd
-                            WHERE rwd.request_id = request_workflow_details.request_id
-                              AND rwd.status = "pending"
-                            ORDER BY workflow_step_id ASC
-                            LIMIT 1
-                        )');
+                    SELECT workflow_step_id
+                    FROM request_workflow_details rwd
+                    WHERE rwd.request_id = request_workflow_details.request_id
+                      AND rwd.status = "pending"
+                      AND rwd.is_sendback = 0
+                    ORDER BY workflow_step_id ASC
+                    LIMIT 1
+                )');
                     })
                     ->get();
             }
@@ -94,7 +100,7 @@ class CreateRequestController extends Controller
                     default => $finalStatus['pending_by'],
                 };
 
-                // ✅ Build workflow timeline (same as requestDetailsAll)
+                //  Build workflow timeline (same as requestDetailsAll)
                 $workflowTimeline = $req->workflowHistory
                     ->groupBy('workflow_step_id')
                     ->map(function ($steps) {
@@ -114,7 +120,7 @@ class CreateRequestController extends Controller
                     ->values()
                     ->toArray();
 
-                // ✅ Build status timeline (same as requestDetailsAll)
+                //  Build status timeline (same as requestDetailsAll)
                 $statusTimeline = [[
                     'stage' => 'Submitted',
                     'status' => 'submitted',
@@ -213,7 +219,7 @@ class CreateRequestController extends Controller
                         'status' => $workflow?->status,
                     ],
 
-                    // ✅ Now included
+                    //  Now included
                     'workflow_history' => $workflowTimeline,
                     'status_timeline' => $statusTimeline,
 
@@ -468,6 +474,312 @@ class CreateRequestController extends Controller
     }
 
     /** Update request */
+    // public function update(Request $request, $id)
+    // {
+    //     $req = ModelsRequest::find($id);
+
+    //     if (! $req) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Request not found',
+    //         ], 404);
+    //     }
+
+    //     /**
+    //      * ===============================
+    //      * RECALL REQUEST
+    //      * ===============================
+    //      */
+    //     if ($request->status === 'draft') {
+
+    //         if (! in_array($req->status, ['submitted', 'pending', 'in approval'])) {
+    //             return response()->json([
+    //                 'status' => 'error',
+    //                 'message' => 'Only submitted or pending requests can be recalled',
+    //             ], 422);
+    //         }
+
+    //         DB::transaction(function () use ($req) {
+
+    //             $req->update(['status' => 'draft']);
+
+    //             // Cancel pending workflow approvals
+    //             RequestWorkflowDetails::where('request_id', $req->request_id)
+    //                 ->where('status', 'pending')
+    //                 ->update(['status' => 'cancelled']);
+    //         });
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'Request recalled to draft successfully',
+    //         ]);
+    //     }
+
+    //     /**
+    //      * ===============================
+    //      * WITHDRAW REQUEST
+    //      * ===============================
+    //      */
+    //     if ($request->status === 'withdraw') {
+
+    //         if ($req->status !== 'submitted') {
+    //             return response()->json([
+    //                 'status' => 'error',
+    //                 'message' => 'Only submitted requests can be withdrawn',
+    //             ], 422);
+    //         }
+
+    //         DB::transaction(function () use ($req) {
+    //             $req->update(['status' => 'withdraw']);
+
+    //             RequestWorkflowDetails::where('request_id', $req->request_id)
+    //                 ->where('status', 'pending')
+    //                 ->update(['status' => 'withdraw']);
+    //         });
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'message' => 'Request withdrawn successfully',
+    //         ]);
+    //     }
+
+    //     /**
+    //      * ===============================
+    //      * VALIDATION (FULL)
+    //      * ===============================
+    //      */
+    //     $validated = $request->validate([
+    //         // Request master
+    //         'entiti' => 'nullable|integer',
+    //         'user' => 'nullable|integer',
+    //         'request_type' => 'nullable|integer',
+    //         'category' => 'nullable|integer',
+    //         'department' => 'nullable|integer',
+    //         'budget_code' => 'nullable|exists:budget_codes,id',
+    //         'amount' => 'nullable|string',
+    //         'description' => 'nullable|string',
+    //         'supplier_id' => 'nullable|integer',
+    //         'expected_date' => 'nullable|string',
+    //         'priority' => 'nullable|string',
+    //         'behalf_of' => 'nullable|in:0,1',
+    //         'behalf_of_department' => 'required_if:behalf_of,1',
+    //         'behalf_of_buget_code' => 'nullable|exists:budget_codes,id',
+    //         'business_justification' => 'nullable|string',
+    //         'status' => 'nullable|string',
+
+    //         // Normal attachments
+    //         'attachments' => 'nullable|array',
+    //         'attachments.*.document_id' => 'required|integer',
+    //         'attachments.*.file' => 'required|file|max:10240',
+
+    //         // PO / Delivery / Payment
+    //         'po_documents' => 'nullable|file|max:10240',
+    //         'delivery_completed_documents' => 'nullable|file|max:10240',
+    //         'payment_completed_documents' => 'nullable|file|max:10240',
+
+    //         // Supplier rating
+    //         'rating' => 'nullable|integer|min:1|max:5',
+    //         'comment' => 'nullable|string|max:1000',
+    //     ]);
+
+    //     DB::transaction(function () use ($request, $req) {
+
+    //         /**
+    //          * ===============================
+    //          * UPDATE REQUEST MASTER
+    //          * ===============================
+    //          */
+    //         $oldStatus = $req->getOriginal('status');
+    //         $req->update($request->only([
+    //             'entiti',
+    //             'user',
+    //             'request_type',
+    //             'category',
+    //             'department',
+    //             'budget_code',
+    //             'amount',
+    //             'description',
+    //             'supplier_id',
+    //             'expected_date',
+    //             'priority',
+    //             'behalf_of',
+    //             'behalf_of_department',
+    //             'behalf_of_buget_code',
+    //             'business_justification',
+    //             'status',
+    //         ]));
+
+    //         /**
+    //          * ===============================
+    //          * NORMAL ATTACHMENTS (LIKE STORE)
+    //          * ===============================
+    //          */
+    //         if (! empty($request->attachments)) {
+    //             foreach ($request->attachments as $index => $doc) {
+
+    //                 $file = $request->file("attachments.$index.file");
+    //                 if (! $file) {
+    //                     continue;
+    //                 }
+
+    //                 $departmentName = Department::find($req->department)->name ?? 'unknown';
+    //                 $departmentName = str_replace(' ', '_', strtolower($departmentName));
+
+    //                 $fileName = $req->request_id.'_'.$req->entiti.'_'.$departmentName.'_'.$file->getClientOriginalName();
+    //                 $file->storeAs('requestdocuments', $fileName, 'public');
+
+    //                 RequestDocument::create([
+    //                     'request_id' => $req->request_id,
+    //                     'document_id' => $doc['document_id'],
+    //                     'document' => $fileName,
+    //                 ]);
+    //             }
+    //         }
+
+    //         /**
+    //          * ===============================
+    //          * REQUEST DETAIL DOCUMENTS
+    //          * ===============================
+    //          */
+    //         $doc = RequestDetailsDocuments::firstOrCreate(
+    //             ['request_id' => $req->request_id],
+    //             ['request_details_id' => $req->id]
+    //         );
+
+    //         /**
+    //          * ===============================
+    //          * PO UPLOAD
+    //          * ===============================
+    //          */
+    //         if ($request->hasFile('po_documents')) {
+
+    //             if ($req->poDetails()->exists()) {
+    //                 throw new \Exception('PO already created for this request');
+    //             }
+
+    //             $file = $request->file('po_documents');
+    //             $name = 'po_'.$req->request_id.'_'.$file->getClientOriginalName();
+    //             $file->storeAs('request_documents', $name, 'public');
+
+    //             PoUploadDetalils::create([
+    //                 'request_id' => $req->request_id,
+    //                 'is_po_created' => 1,
+    //                 'po_number' => $request->po_number,
+    //                 'po_amount' => $request->po_amount,
+    //                 'po_date' => $request->po_date,
+    //                 'po_documents' => $name,
+    //                 'status' => 'completed',
+    //             ]);
+
+    //             $req->refresh()->recalculateStatus();
+    //         }
+
+    //         /**
+    //          * ===============================
+    //          * DELIVERY (PO REQUIRED)
+    //          * ===============================
+    //          */
+    //         if ($request->hasFile('delivery_documents')) {
+
+    //             if (! $req->poDetails()->exists()) {
+    //                 throw new \Exception('Upload PO before delivery');
+    //             }
+
+    //             $file = $request->file('delivery_documents');
+    //             $name = 'delivery_'.$req->request_id.'_'.time().'_'.$file->getClientOriginalName();
+    //             $file->storeAs('request_documents', $name, 'public');
+
+    //             DeliveryOrerDetails::create([
+    //                 'request_id' => $req->request_id,
+    //                 'is_delivery_completed' => $request->is_delivery_completed == 1 ? 1 : 0,                    'delivery_number' => $request->delivery_number,
+    //                 'delivery_date' => $request->delivery_date,
+    //                 'delivery_quantity' => $request->delivery_quantity,
+    //                 'delivery_documents' => $name,
+    //                 'status' => 'completed',
+    //             ]);
+
+    //             $req->refresh()->recalculateStatus();
+    //         }
+
+    //         /**
+    //          * =======================================
+    //          * RESTORE WORKFLOW (Draft → Submitted)
+    //          * =======================================
+    //          */
+    //         if ($oldStatus === 'draft' && $request->status === 'submitted') {
+
+    //             RequestWorkflowDetails::where('request_id', $req->request_id)
+    //                 ->where('status', 'cancelled')
+    //                 ->update(['status' => 'pending']);
+    //         }
+    //         /**
+    //          * ===============================
+    //          * PAYMENT (DELIVERY REQUIRED)
+    //          * ===============================
+    //          */
+    //         if ($request->hasFile('payment_documents')) {
+
+    //             if (! $req->deliveries()->exists()) {
+    //                 throw new \Exception('Complete delivery before payment');
+    //             }
+
+    //             $file = $request->file('payment_documents');
+    //             $name = 'payment_'.$req->request_id.'_'.time().'_'.$file->getClientOriginalName();
+    //             $file->storeAs('request_documents', $name, 'public');
+
+    //             PaymentDetails::create([
+    //                 'request_id' => $req->request_id,
+    //                 'is_payment_completed' => $request->is_payment_completed == 1 ? 1 : 0,
+    //                 'payment_number' => $request->payment_number,
+    //                 'payment_amount' => $request->payment_amount,
+    //                 'payment_date' => $request->payment_date,
+    //                 'payment_documents' => $name,
+    //                 'status' => 'completed',
+    //             ]);
+
+    //             $req->refresh()->recalculateStatus();
+    //         }
+    //         /**
+    //          * ===============================
+    //          * SUPPLIER RATING (PAYMENT REQUIRED)
+    //          * ===============================
+    //          */
+    //         if ($request->filled('rating')) {
+
+    //             if ($req->user !== Auth::id()) {
+    //                 throw new \Exception('Only request owner can rate supplier');
+    //             }
+
+    //             if (! $req->payments()->exists()) {
+    //                 throw new \Exception('Complete payment before rating');
+    //             }
+
+    //             if (! $req->supplier_id) {
+    //                 throw new \Exception('No supplier linked to request');
+    //             }
+
+    //             if (SupplierRating::where('request_id', $req->request_id)->exists()) {
+    //                 throw new \Exception('Supplier already rated');
+    //             }
+
+    //             SupplierRating::create([
+    //                 'request_id' => $req->request_id,
+    //                 'user_id' => Auth::id(),
+    //                 'supplier_id' => $req->supplier_id,
+    //                 'rating' => $request->rating,
+    //                 'comment' => $request->comment,
+    //                 'status' => 'completed',
+    //             ]);
+
+    //             $req->changeStatus(ModelsRequest::CLOSED);
+    //         }
+    //     });
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'message' => 'Request updated successfully',
+    //     ]);
+    // }
     public function update(Request $request, $id)
     {
         $req = ModelsRequest::find($id);
@@ -479,138 +791,79 @@ class CreateRequestController extends Controller
             ], 404);
         }
 
-        /**
-         * ===============================
-         * RECALL REQUEST
-         * ===============================
-         */
-        if ($request->status === 'draft') {
+        DB::transaction(function () use ($request, $req) {
 
-            if (! in_array($req->status, ['submitted', 'pending', 'in approval'])) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Only submitted or pending requests can be recalled',
-                ], 422);
-            }
+            $oldStatus = $req->getOriginal('status');
 
-            DB::transaction(function () use ($req) {
+            // -------------------------- RECALL TO DRAFT -------------------------- //
+            if ($request->status === 'draft') {
+                if (! in_array($req->status, ['submitted', 'pending', 'in_approval'])) {
+                    throw new \Exception('Only submitted or pending requests can be recalled');
+                }
 
                 $req->update(['status' => 'draft']);
 
-                // Cancel pending workflow approvals
                 RequestWorkflowDetails::where('request_id', $req->request_id)
                     ->where('status', 'pending')
                     ->update(['status' => 'cancelled']);
-            });
 
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Request recalled to draft successfully',
-            ]);
-        }
-
-        /**
-         * ===============================
-         * WITHDRAW REQUEST
-         * ===============================
-         */
-        if ($request->status === 'withdraw') {
-
-            if ($req->status !== 'submitted') {
                 return response()->json([
-                    'status' => 'error',
-                    'message' => 'Only submitted requests can be withdrawn',
-                ], 422);
+                    'status' => 'success',
+                    'message' => 'Request recalled to draft successfully',
+                ]);
             }
 
-            DB::transaction(function () use ($req) {
+            // -------------------------- WITHDRAW REQUEST -------------------------- //
+            if ($request->status === 'withdraw') {
+                if ($req->status !== 'submitted') {
+                    throw new \Exception('Only submitted requests can be withdrawn');
+                }
+
                 $req->update(['status' => 'withdraw']);
 
                 RequestWorkflowDetails::where('request_id', $req->request_id)
                     ->where('status', 'pending')
                     ->update(['status' => 'withdraw']);
-            });
 
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Request withdrawn successfully',
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Request withdrawn successfully',
+                ]);
+            }
+
+            // -------------------------- UPDATE REQUEST MASTER -------------------------- //
+            $validated = $request->validate([
+                'entiti' => 'nullable|integer',
+                'user' => 'nullable|integer',
+                'request_type' => 'nullable|integer',
+                'category' => 'nullable|integer',
+                'department' => 'nullable|integer',
+                'budget_code' => 'nullable|exists:budget_codes,id',
+                'amount' => 'nullable|string',
+                'description' => 'nullable|string',
+                'supplier_id' => 'nullable|integer',
+                'expected_date' => 'nullable|string',
+                'priority' => 'nullable|string',
+                'behalf_of' => 'nullable|in:0,1',
+                'behalf_of_department' => 'required_if:behalf_of,1',
+                'behalf_of_buget_code' => 'nullable|exists:budget_codes,id',
+                'business_justification' => 'nullable|string',
+                'status' => 'nullable|string',
+                'attachments' => 'nullable|array',
+                'attachments.*.document_id' => 'nullable|integer',
+                'attachments.*.file' => 'required|file|max:10240',
             ]);
-        }
 
-        /**
-         * ===============================
-         * VALIDATION (FULL)
-         * ===============================
-         */
-        $validated = $request->validate([
-            // Request master
-            'entiti' => 'nullable|integer',
-            'user' => 'nullable|integer',
-            'request_type' => 'nullable|integer',
-            'category' => 'nullable|integer',
-            'department' => 'nullable|integer',
-            'budget_code' => 'nullable|exists:budget_codes,id',
-            'amount' => 'nullable|string',
-            'description' => 'nullable|string',
-            'supplier_id' => 'nullable|integer',
-            'expected_date' => 'nullable|string',
-            'priority' => 'nullable|string',
-            'behalf_of' => 'nullable|in:0,1',
-            'behalf_of_department' => 'required_if:behalf_of,1',
-            'behalf_of_buget_code' => 'nullable|exists:budget_codes,id',
-            'business_justification' => 'nullable|string',
-            'status' => 'nullable|string',
-
-            // Normal attachments
-            'attachments' => 'nullable|array',
-            'attachments.*.document_id' => 'required|integer',
-            'attachments.*.file' => 'required|file|max:10240',
-
-            // PO / Delivery / Payment
-            'po_documents' => 'nullable|file|max:10240',
-            'delivery_completed_documents' => 'nullable|file|max:10240',
-            'payment_completed_documents' => 'nullable|file|max:10240',
-
-            // Supplier rating
-            'rating' => 'nullable|integer|min:1|max:5',
-            'comment' => 'nullable|string|max:1000',
-        ]);
-
-        DB::transaction(function () use ($request, $req) {
-
-            /**
-             * ===============================
-             * UPDATE REQUEST MASTER
-             * ===============================
-             */
-            $oldStatus = $req->getOriginal('status');
             $req->update($request->only([
-                'entiti',
-                'user',
-                'request_type',
-                'category',
-                'department',
-                'budget_code',
-                'amount',
-                'description',
-                'supplier_id',
-                'expected_date',
-                'priority',
-                'behalf_of',
-                'behalf_of_department',
-                'behalf_of_buget_code',
-                'business_justification',
-                'status',
+                'entiti', 'user', 'request_type', 'category', 'department',
+                'budget_code', 'amount', 'description', 'supplier_id', 'expected_date',
+                'priority', 'behalf_of', 'behalf_of_department', 'behalf_of_buget_code',
+                'business_justification', 'status',
             ]));
 
-            /**
-             * ===============================
-             * NORMAL ATTACHMENTS (LIKE STORE)
-             * ===============================
-             */
+            // -------------------------- ATTACHMENTS -------------------------- //
             if (! empty($request->attachments)) {
                 foreach ($request->attachments as $index => $doc) {
-
                     $file = $request->file("attachments.$index.file");
                     if (! $file) {
                         continue;
@@ -624,35 +877,107 @@ class CreateRequestController extends Controller
 
                     RequestDocument::create([
                         'request_id' => $req->request_id,
-                        'document_id' => $doc['document_id'],
+                        'document_id' => $doc['document_id'] ?? null,
                         'document' => $fileName,
                     ]);
                 }
             }
 
-            /**
-             * ===============================
-             * REQUEST DETAIL DOCUMENTS
-             * ===============================
-             */
-            $doc = RequestDetailsDocuments::firstOrCreate(
-                ['request_id' => $req->request_id],
-                ['request_details_id' => $req->id]
-            );
+            // -------------------------- DRAFT → SUBMITTED: RECREATE WORKFLOW -------------------------- //
+            if ($oldStatus === 'draft' && $request->status === 'submitted') {
 
-            /**
-             * ===============================
-             * PO UPLOAD
-             * ===============================
-             */
-            if ($request->hasFile('po_documents')) {
+                // Delete old workflow details if any
+                RequestWorkflowDetails::where('request_id', $req->request_id)
+                    ->delete();
 
-                if ($req->poDetails()->exists()) {
-                    throw new \Exception('PO already created for this request');
+                // Fetch workflow
+                $workflow = WorkFlow::where('entity_id', $req->entiti)
+                    ->where('categori_id', $req->category)
+                    ->where('request_type_id', $req->request_type)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if ($workflow) {
+                    $steps = WorkflowStep::where('workflow_id', $workflow->id)
+                        ->orderBy('order_id')
+                        ->get();
+
+                    foreach ($steps as $step) {
+                        $roleAssigns = WorkflowRoleAssign::where('workflow_id', $workflow->id)
+                            ->where('step_id', $step->id)
+                            ->get();
+
+                        foreach ($roleAssigns as $roleAssign) {
+                            $users = collect();
+                            if ($roleAssign->specific_user == 1 && $roleAssign->user_id) {
+                                $userIds = json_decode($roleAssign->user_id, true);
+                                $userIds = is_array($userIds) ? $userIds : [$roleAssign->user_id];
+                                $users = User::whereIn('id', $userIds)->get();
+                            } else {
+                                $users = User::whereHas('roles', function ($q) use ($roleAssign) {
+                                    $q->where('roles.id', $roleAssign->role_id);
+                                })->get();
+                            }
+
+                            if ($users->isEmpty()) {
+                                continue;
+                            }
+
+                            if (strtolower($roleAssign->approval_logic) === 'and') {
+                                foreach ($users as $user) {
+                                    RequestWorkflowDetails::create([
+                                        'request_id' => $req->request_id,
+                                        'workflow_id' => $workflow->id,
+                                        'workflow_step_id' => $step->id,
+                                        'workflow_role_id' => $roleAssign->role_id,
+                                        'assigned_user_id' => $user->id,
+                                        'status' => 'pending',
+                                        'approval_logic' => strtolower($roleAssign->approval_logic),
+                                        'is_sendback' => 0,
+                                    ]);
+
+                                    NotificationService::send(
+                                        $user->id,
+                                        'New Request Assigned',
+                                        "You have been assigned a new request {$req->request_id} to approve.",
+                                        'request_assigned',
+                                        $req->request_id,
+                                        'request',
+                                        'Workflow assignment'
+                                    );
+                                }
+                            } else {
+                                $assignedUser = $users->first();
+                                RequestWorkflowDetails::create([
+                                    'request_id' => $req->request_id,
+                                    'workflow_id' => $workflow->id,
+                                    'workflow_step_id' => $step->id,
+                                    'workflow_role_id' => $roleAssign->role_id,
+                                    'assigned_user_id' => $assignedUser->id,
+                                    'status' => 'pending',
+                                    'approval_logic' => strtolower($roleAssign->approval_logic),
+                                    'is_sendback' => 0,
+                                ]);
+
+                                NotificationService::send(
+                                    $assignedUser->id,
+                                    'New Request Assigned',
+                                    "Request {$req->request_id} has been assigned to you for approval.",
+                                    'workflow_assigned',
+                                    $req->request_id,
+                                    'request',
+                                    'Assigned via workflow step '.$step->order_id
+                                );
+                            }
+                        }
+                    }
                 }
+            }
 
+            // -------------------------- PO / Delivery / Payment -------------------------- //
+            if ($request->hasFile('po_documents')) {
                 $file = $request->file('po_documents');
-                $name = 'po_'.$req->request_id.'_'.$file->getClientOriginalName();
+                $name = 'po_'.$req->request_id.'_'.time().'_'.$file->getClientOriginalName();
                 $file->storeAs('request_documents', $name, 'public');
 
                 PoUploadDetalils::create([
@@ -668,13 +993,7 @@ class CreateRequestController extends Controller
                 $req->refresh()->recalculateStatus();
             }
 
-            /**
-             * ===============================
-             * DELIVERY (PO REQUIRED)
-             * ===============================
-             */
             if ($request->hasFile('delivery_documents')) {
-
                 if (! $req->poDetails()->exists()) {
                     throw new \Exception('Upload PO before delivery');
                 }
@@ -685,7 +1004,8 @@ class CreateRequestController extends Controller
 
                 DeliveryOrerDetails::create([
                     'request_id' => $req->request_id,
-                    'is_delivery_completed' => $request->is_delivery_completed == 1 ? 1 : 0,                    'delivery_number' => $request->delivery_number,
+                    'is_delivery_completed' => $request->is_delivery_completed == 1 ? 1 : 0,
+                    'delivery_number' => $request->delivery_number,
                     'delivery_date' => $request->delivery_date,
                     'delivery_quantity' => $request->delivery_quantity,
                     'delivery_documents' => $name,
@@ -695,24 +1015,7 @@ class CreateRequestController extends Controller
                 $req->refresh()->recalculateStatus();
             }
 
-            /**
-             * =======================================
-             * RESTORE WORKFLOW (Draft → Submitted)
-             * =======================================
-             */
-            if ($oldStatus === 'draft' && $request->status === 'submitted') {
-
-                RequestWorkflowDetails::where('request_id', $req->request_id)
-                    ->where('status', 'cancelled')
-                    ->update(['status' => 'pending']);
-            }
-            /**
-             * ===============================
-             * PAYMENT (DELIVERY REQUIRED)
-             * ===============================
-             */
             if ($request->hasFile('payment_documents')) {
-
                 if (! $req->deliveries()->exists()) {
                     throw new \Exception('Complete delivery before payment');
                 }
@@ -733,25 +1036,18 @@ class CreateRequestController extends Controller
 
                 $req->refresh()->recalculateStatus();
             }
-            /**
-             * ===============================
-             * SUPPLIER RATING (PAYMENT REQUIRED)
-             * ===============================
-             */
-            if ($request->filled('rating')) {
 
+            // -------------------------- SUPPLIER RATING -------------------------- //
+            if ($request->filled('rating')) {
                 if ($req->user !== Auth::id()) {
                     throw new \Exception('Only request owner can rate supplier');
                 }
-
                 if (! $req->payments()->exists()) {
                     throw new \Exception('Complete payment before rating');
                 }
-
                 if (! $req->supplier_id) {
                     throw new \Exception('No supplier linked to request');
                 }
-
                 if (SupplierRating::where('request_id', $req->request_id)->exists()) {
                     throw new \Exception('Supplier already rated');
                 }
