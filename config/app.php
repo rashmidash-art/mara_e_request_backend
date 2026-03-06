@@ -65,8 +65,8 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
-
+    // 'timezone' => 'UTC',
+    'timezone' => 'Asia/Kuala_Lumpur',
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
@@ -122,7 +122,6 @@ return [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
-
 
     'frontend_url' => env('APP_FRONTEND_URL', 'http://localhost:3000'),
 

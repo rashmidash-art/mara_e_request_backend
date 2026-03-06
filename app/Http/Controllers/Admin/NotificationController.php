@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\Admin;
+
 // namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Notification;
@@ -20,6 +21,7 @@ class NotificationController extends Controller
         }
 
         $notifications = Notification::where('user_id', $user->id)
+            ->where('is_read', 0)
             ->orderBy('notify_at', 'desc')
             ->get();
 

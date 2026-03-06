@@ -28,7 +28,6 @@ use App\Http\Controllers\Admin\WorkFlowStepsController;
 use App\Http\Controllers\Admin\WorkFlowTypeController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetContrller;
-use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -56,6 +55,7 @@ Route::get('categore/{id}/document', action: [DocumentController::class, 'getDoc
 Route::get('request_type/{id}/document', action: [DocumentController::class, 'getDocumentsByRequestType']);
 Route::get('requests/{id}/download-pdf', [CreateRequestController::class, 'downloadRequestPdf']);
 Route::get('budget-summary', [BudgetController::class, 'budgetSummary']);
+Route::get('/entity/{id}/categories', [EntitiesController::class, 'getCategoryByEntity']);
 
 Route::middleware('auth:api,entiti-api')->group(function () {
     Route::get('budgets', [BudgetController::class, 'index']);

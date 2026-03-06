@@ -175,29 +175,17 @@ class WorkFlow_RoleAssignController extends Controller
                 'workflow_id' => 'required|integer',
                 'step_id' => 'required|integer',
                 'role_id' => 'required|integer',
-                'approval_logic' => 'sometimes|string',
+                'approval_logic' => 'required|string',
                 'remark' => 'nullable|string',
             ]);
 
-            $entity_id = $request->entity_id;
-            $workflow_id = $request->workflow_id;
-            $step_id = $request->step_id;
-            $role_id = $request->role_id;
             $approval_logic = strtolower($request->approval_logic);
             $remark = $request->remark;
 
-            // Normalize users into array
+            // Normalize users
             $user_ids = is_array($request->user_id)
                 ? $request->user_id
                 : [$request->user_id];
-
-            // Get existing records
-            $existing = WorkflowRoleAssign::where([
-                'entity_id' => $entity_id,
-                'workflow_id' => $workflow_id,
-                'step_id' => $step_id,
-                'role_id' => $role_id,
-            ])->orderBy('id')->get();
 
             /*
             |--------------------------------------------------------------------------
@@ -206,59 +194,76 @@ class WorkFlow_RoleAssignController extends Controller
             */
             if ($approval_logic === 'single') {
 
-                $firstUserId = $existing->count()
-                    ? $existing->first()->user_id
-                    : $user_ids[0];
+                $existing = WorkflowRoleAssign::where([
+                    'entity_id' => $request->entity_id,
+                    'workflow_id' => $request->workflow_id,
+                    'step_id' => $request->step_id,
+                ])->orderBy('id')->get();
 
-                // Delete all records for this step/role/entity
-                WorkflowRoleAssign::where([
-                    'entity_id' => $entity_id,
-                    'workflow_id' => $workflow_id,
-                    'step_id' => $step_id,
-                    'role_id' => $role_id,
-                ])->delete();
+                if ($existing->count()) {
 
-                // Insert only one user
-                WorkflowRoleAssign::create([
-                    'entity_id' => $entity_id,
-                    'workflow_id' => $workflow_id,
-                    'step_id' => $step_id,
-                    'role_id' => $role_id,
-                    'approval_logic' => 'single',
-                    'specific_user' => 1,
-                    'user_id' => $firstUserId,
-                    'remark' => $remark,
-                ]);
+                    $first = $existing->first();
+
+                    // Update first record
+                    $first->update([
+                        'role_id' => $request->role_id,
+                        'approval_logic' => 'single',
+                        'specific_user' => 1,
+                        'user_id' => $user_ids[0],
+                        'remark' => $remark,
+                    ]);
+
+                    // Remove extra users
+                    WorkflowRoleAssign::where([
+                        'entity_id' => $request->entity_id,
+                        'workflow_id' => $request->workflow_id,
+                        'step_id' => $request->step_id,
+                    ])
+                        ->where('id', '!=', $first->id)
+                        ->delete();
+
+                } else {
+
+                    WorkflowRoleAssign::create([
+                        'entity_id' => $request->entity_id,
+                        'workflow_id' => $request->workflow_id,
+                        'step_id' => $request->step_id,
+                        'role_id' => $request->role_id,
+                        'approval_logic' => 'single',
+                        'specific_user' => 1,
+                        'user_id' => $user_ids[0],
+                        'remark' => $remark,
+                    ]);
+                }
             }
 
             /*
             |--------------------------------------------------------------------------
-            | OR / AND LOGIC
+            | AND / OR LOGIC
             |--------------------------------------------------------------------------
             */
             else {
 
-                // Delete users not in new selection
+                // Delete users not selected anymore
                 WorkflowRoleAssign::where([
-                    'entity_id' => $entity_id,
-                    'workflow_id' => $workflow_id,
-                    'step_id' => $step_id,
-                    'role_id' => $role_id,
-                ])->whereNotIn('user_id', $user_ids)
+                    'entity_id' => $request->entity_id,
+                    'workflow_id' => $request->workflow_id,
+                    'step_id' => $request->step_id,
+                ])
+                    ->whereNotIn('user_id', $user_ids)
                     ->delete();
 
-                // Insert or update selected users
                 foreach ($user_ids as $user_id) {
 
                     WorkflowRoleAssign::updateOrCreate(
                         [
-                            'entity_id' => $entity_id,
-                            'workflow_id' => $workflow_id,
-                            'step_id' => $step_id,
-                            'role_id' => $role_id,
+                            'entity_id' => $request->entity_id,
+                            'workflow_id' => $request->workflow_id,
+                            'step_id' => $request->step_id,
                             'user_id' => $user_id,
                         ],
                         [
+                            'role_id' => $request->role_id,
                             'approval_logic' => $approval_logic,
                             'specific_user' => 1,
                             'remark' => $remark,

@@ -118,38 +118,67 @@ class Request extends Model
                 return;
             }
 
-            if (! $this->deliveries()
-                ->where('is_delivery_completed', 1)
-                ->exists()) {
+            if ($this->payments()->where('is_payment_completed', 1)->exists()) {
 
-                $this->changeStatus(self::PO_CREATED);
+                if (! $this->supplierRating()->exists()) {
+                    $this->changeStatus(self::PAYMENT_COMPLETED);
+
+                    return;
+                }
+
+                $this->changeStatus(self::SUPPLIER_RATING);
 
                 return;
             }
 
-            // Delivery completed but payment not completed
-            if (! $this->payments()
-                ->where('is_payment_completed', 1)
-                ->exists()) {
-
+            if ($this->deliveries()->where('is_delivery_completed', 1)->exists()) {
                 $this->changeStatus(self::DELIVERY_COMPLETED);
 
                 return;
             }
 
-            // Payment completed but rating not done
-            if (! $this->supplierRating()->exists()) {
-
-                $this->changeStatus(self::PAYMENT_COMPLETED);
-
-                return;
-            }
-
-            // Everything done
-            $this->changeStatus(self::SUPPLIER_RATING);
-
-            return;
+            $this->changeStatus(self::PO_CREATED);
         }
+        // if ($steps->every(fn ($s) => $s->status === 'approved')) {
+
+        //     if (! $this->poDetails()->exists()) {
+        //         $this->changeStatus(self::APPROVE);
+
+        //         return;
+        //     }
+
+        //     if (! $this->deliveries()
+        //         ->where('is_delivery_completed', 1)
+        //         ->exists()) {
+
+        //         $this->changeStatus(self::PO_CREATED);
+
+        //         return;
+        //     }
+
+        //     // Delivery completed but payment not completed
+        //     if (! $this->payments()
+        //         ->where('is_payment_completed', 1)
+        //         ->exists()) {
+
+        //         $this->changeStatus(self::DELIVERY_COMPLETED);
+
+        //         return;
+        //     }
+
+        //     // Payment completed but rating not done
+        //     if (! $this->supplierRating()->exists()) {
+
+        //         $this->changeStatus(self::PAYMENT_COMPLETED);
+
+        //         return;
+        //     }
+
+        //     // Everything done
+        //     $this->changeStatus(self::SUPPLIER_RATING);
+
+        //     return;
+        // }
     }
 
     public function poDetails()
@@ -298,7 +327,7 @@ class Request extends Model
 
     public function getFinalStatus()
     {
-        // 1️⃣ Closed / Draft / Withdraw (direct states)
+        //  Direct states
         if ($this->status === self::CLOSED) {
             return [
                 'final_status' => 'Closed',
@@ -320,37 +349,44 @@ class Request extends Model
             ];
         }
 
-        $steps = $this->workflowUsers()->get();
+        $steps = $this->workflowDetails()->get();
 
-        // 2️⃣ Rejected
+        if ($steps->isEmpty()) {
+            return [
+                'final_status' => ucfirst($this->status),
+                'pending_by' => null,
+            ];
+        }
+
+        //  Rejected
         if ($steps->contains('status', 'rejected')) {
             return [
                 'final_status' => 'Rejected',
-                'pending_by' => 'Returned',
+                'pending_by' => 'Rejected',
             ];
         }
 
-        // 3️⃣ Submitted
+        //  Submitted (all pending)
         if ($steps->every(fn ($s) => $s->status === 'pending')) {
             return [
                 'final_status' => 'Submitted',
-                'pending_by' => $steps->first()?->role?->name,
+                'pending_by' => optional($steps->first()->role)->name,
             ];
         }
 
-        // 4️⃣ In Approval
-        if (
-            $steps->contains('status', 'approved') &&
-            $steps->contains('status', 'pending')
-        ) {
+        //  In Approval
+        if ($steps->contains('status', 'approved') && $steps->contains('status', 'pending')) {
+
+            $pendingStep = $steps->firstWhere('status', 'pending');
+
             return [
                 'final_status' => 'In Approval',
-                'pending_by' => $steps->firstWhere('status', 'pending')?->role?->name,
+                'pending_by' => optional($pendingStep?->role)->name,
             ];
         }
 
-        // 5️⃣ Fully Approved → Now calculate from real tables
-        if ($steps->isNotEmpty() && $steps->every(fn ($s) => $s->status === 'approved')) {
+        //  Fully Approved → Process stages
+        if ($steps->every(fn ($s) => $s->status === 'approved')) {
 
             if (! $this->hasPoCreated()) {
                 return [
@@ -359,20 +395,83 @@ class Request extends Model
                 ];
             }
 
-            if (! $this->hasDeliveryCompleted()) {
+            // if (! $this->hasDeliveryCompleted()) {
+            //     return [
+            //         'final_status' => 'PO Created',
+            //         'pending_by' => 'Upload Delivery',
+            //     ];
+            // }
+            $deliveries = $this->deliveries()->count();
+
+            $finalDelivery = $this->deliveries()
+                ->where('is_delivery_completed', 1)
+                ->exists();
+
+            if ($deliveries > 0 && ! $finalDelivery) {
+
+                $suffix = match ($deliveries) {
+                    1 => '1st',
+                    2 => '2nd',
+                    3 => '3rd',
+                    default => $deliveries.'th',
+                };
+
                 return [
-                    'final_status' => 'PO Created',
-                    'pending_by' => 'Upload Delivery',
+                    'final_status' => "{$suffix} Delivery Completed",
+                    'pending_by' => 'Upload Next Delivery',
                 ];
             }
+            $payments = $this->payments()->count();
+            $finalPayment = $this->payments()
+                ->where('is_payment_completed', 1)
+                ->exists();
 
-            if (! $this->hasPaymentCompleted()) {
+            if ($finalDelivery && $payments == 0) {
                 return [
                     'final_status' => 'Delivery Completed',
                     'pending_by' => 'Upload Payment',
                 ];
             }
 
+            // if ($finalDelivery) {
+            //     return [
+            //         'final_status' => 'Delivery Completed',
+            //         'pending_by' => 'Upload Payment',
+            //     ];
+            // }
+            // if (! $this->hasPaymentCompleted()) {
+            //     return [
+            //         'final_status' => 'Delivery Completed',
+            //         'pending_by' => 'Upload Payment',
+            //     ];
+            // }
+
+            $payments = $this->payments()->count();
+            $finalPayment = $this->payments()
+                ->where('is_payment_completed', 1)
+                ->exists();
+
+            if ($payments > 0 && ! $finalPayment) {
+
+                $suffix = match ($payments) {
+                    1 => '1st',
+                    2 => '2nd',
+                    3 => '3rd',
+                    default => $payments.'th',
+                };
+
+                return [
+                    'final_status' => "{$suffix} Payment Completed",
+                    'pending_by' => 'Upload Next Payment',
+                ];
+            }
+
+            if ($finalPayment) {
+                return [
+                    'final_status' => 'Payment Completed',
+                    'pending_by' => 'Rate Supplier',
+                ];
+            }
             if (! $this->hasSupplierRated()) {
                 return [
                     'final_status' => 'Payment Completed',

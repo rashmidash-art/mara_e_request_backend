@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use App\Models\Department;
 use App\Models\Document;
 use App\Models\Entiti;
@@ -286,4 +287,19 @@ class EntitiesController extends Controller
             'data' => $requestTypes,
         ]);
     }
+
+    public function getCategoryByEntity($entityId)
+{
+    $categories = DB::table('entity_requests')
+        ->join('categories', 'categories.id', '=', 'entity_requests.categore_id')
+        ->where('entity_requests.entity_id', $entityId)
+        ->select('categories.id', 'categories.name')
+        ->distinct()
+        ->get();
+
+    return response()->json([
+        'status' => 'success',
+        'data' => $categories
+    ]);
+}
 }

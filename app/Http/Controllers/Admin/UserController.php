@@ -144,14 +144,13 @@ class UserController extends Controller
                         'message' => 'The selected department does not belong to the specified entity.',
                     ], 400);
                 }
-
                 // Validate LOA against department budget
-                if ($request->loa > $department->budget) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Requested LOA exceeds department budget.',
-                    ], 400);
-                }
+                // if ($request->loa > $department->budget) {
+                //     return response()->json([
+                //         'status' => 'error',
+                //         'message' => 'Requested LOA exceeds department budget.',
+                //     ], 400);
+                // }
             }
 
             // Create user
