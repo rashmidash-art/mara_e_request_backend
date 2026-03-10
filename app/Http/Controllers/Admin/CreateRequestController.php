@@ -73,7 +73,7 @@ class CreateRequestController extends Controller
                     ->where('entiti', $userEntityId)
                     ->whereHas('workflowDetails', function ($q) use ($userId) {
                         $q->where('assigned_user_id', $userId)
-                            ->where('status', 'pending') //  VERY IMPORTANT
+                            ->where('status', 'pending')
                             ->where('is_sendback', 0)
                             ->whereRaw('workflow_step_id = (
                     SELECT workflow_step_id
@@ -241,180 +241,6 @@ class CreateRequestController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to fetch requests',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
-    public function store(Request $request)
-    {
-        try {
-            // ------------------------- VALIDATION ------------------------- //
-            $validated = $request->validate([
-                'entiti' => 'nullable|integer',
-                'user' => 'nullable|integer',
-                'request_type' => 'nullable|integer',
-                'category' => 'nullable|integer',
-                'department' => 'nullable|integer',
-                'amount' => 'nullable|string',
-                'description' => 'nullable|string',
-                'supplier_id' => 'nullable|integer',
-                'expected_date' => 'nullable|string',
-                'priority' => 'nullable|string',
-                'behalf_of' => 'nullable|in:0,1',
-                'behalf_of_department' => 'required_if:behalf_of,1',
-                'business_justification' => 'nullable|string',
-                'status' => 'nullable|in:submitted,draft,deleted,withdraw',
-                'attachments' => 'nullable|array',
-                'attachments.*.document_id' => 'nullable|integer',
-                'attachments.*.file' => 'required|file|max:10240',
-                'budget_code' => 'nullable|exists:budget_codes,id',
-                'behalf_of_buget_code' => 'nullable|exists:budget_codes,id',
-            ]);
-
-            $status = $request->status ?? ModelsRequest::DRAFT;
-
-            // ------------------------- WORKFLOW CHECK ------------------------- //
-            $workflow = null;
-            if ($status !== 'draft') {
-                $workflow = WorkFlow::where('entity_id', $request->entiti)
-                    ->where('categori_id', $request->category)
-                    ->where('request_type_id', $request->request_type)
-                    ->orderBy('id', 'desc')
-                    ->first();
-
-                if (! $workflow) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Workflow not configured for selected entity, category, and request type',
-                    ], 422);
-                }
-            }
-
-            // ------------------------- CREATE REQUEST WITH TRANSACTION ------------------------- //
-            DB::transaction(function () use ($request, $workflow, $status, &$req) {
-                // Generate Request ID
-                $year = date('Y');
-                $last = ModelsRequest::whereYear('created_at', $year)->orderBy('id', 'desc')->first();
-                $nextNumber = $last ? $last->id + 1 : 1;
-                $request_no = "REQ-{$year}-".str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
-
-                // Create request
-                $req = ModelsRequest::create([
-                    'request_id' => $request_no,
-                    'entiti' => $request->entiti,
-                    'user' => $request->user,
-                    'request_type' => $request->request_type,
-                    'category' => $request->category,
-                    'department' => $request->department,
-                    'budget_code' => $request->budget_code,
-                    'amount' => $request->amount,
-                    'description' => $request->description,
-                    'supplier_id' => $request->supplier_id,
-                    'expected_date' => $request->expected_date,
-                    'priority' => $request->priority,
-                    'behalf_of' => $request->behalf_of,
-                    'behalf_of_department' => $request->behalf_of_department,
-                    'behalf_of_buget_code' => $request->behalf_of_buget_code,
-                    'business_justification' => $request->business_justification,
-                    'status' => $status,
-                ]);
-
-                // Handle attachments
-                if (! empty($request->attachments)) {
-                    foreach ($request->attachments as $index => $doc) {
-                        $file = $request->file("attachments.$index.file");
-                        if (! $file) {
-                            continue;
-                        }
-
-                        $departmentName = Department::find($req->department)->name ?? 'unknown';
-                        $departmentName = str_replace(' ', '_', strtolower($departmentName));
-                        $newFileName = $req->request_id.'_'.$req->entiti.'_'.$departmentName.'_'.$file->getClientOriginalName();
-                        $file->storeAs('requestdocuments', $newFileName, 'public');
-
-                        RequestDocument::create([
-                            'request_id' => $req->request_id,
-                            'document_id' => $doc['document_id'] ?? null,
-                            'document' => $newFileName,
-                        ]);
-                    }
-                }
-
-                // Skip workflow assignment if draft
-                if ($status === 'draft') {
-                    return;
-                }
-
-                // Workflow assignment
-                $steps = WorkflowStep::where('workflow_id', $workflow->id)
-                    ->orderBy('order_id')
-                    ->get();
-
-                foreach ($steps as $step) {
-                    $roleAssigns = WorkflowRoleAssign::where('workflow_id', $workflow->id)
-                        ->where('step_id', $step->id)
-                        ->get();
-
-                    foreach ($roleAssigns as $roleAssign) {
-                        $users = collect();
-
-                        if ($roleAssign->specific_user == 1 && $roleAssign->user_id) {
-                            $userIds = json_decode($roleAssign->user_id, true);
-                            $userIds = is_array($userIds) ? $userIds : [$roleAssign->user_id];
-                            $users = User::whereIn('id', $userIds)->get();
-                        } else {
-                            $users = User::whereHas('roles', function ($q) use ($roleAssign) {
-                                $q->where('roles.id', $roleAssign->role_id);
-                            })->get();
-                        }
-
-                        if ($users->isEmpty()) {
-                            continue;
-                        }
-
-                        if (strtolower($roleAssign->approval_logic) === 'and') {
-                            foreach ($users as $user) {
-                                RequestWorkflowDetails::create([
-                                    'request_id' => $req->request_id,
-                                    'workflow_id' => $workflow->id,
-                                    'workflow_step_id' => $step->id,
-                                    'workflow_role_id' => $roleAssign->role_id,
-                                    'assigned_user_id' => $user->id,
-                                    'status' => 'pending',
-                                    'approval_logic' => strtolower($roleAssign->approval_logic),
-                                    'is_sendback' => 0,
-                                ]);
-                            }
-                        } else {
-                            RequestWorkflowDetails::create([
-                                'request_id' => $req->request_id,
-                                'workflow_id' => $workflow->id,
-                                'workflow_step_id' => $step->id,
-                                'workflow_role_id' => $roleAssign->role_id,
-                                'assigned_user_id' => $users->first()->id,
-                                'status' => 'pending',
-                                'approval_logic' => strtolower($roleAssign->approval_logic),
-                                'is_sendback' => 0,
-                            ]);
-                        }
-                    }
-                }
-            });
-
-            // ------------------------- RESPONSE ------------------------- //
-            return response()->json([
-                'status' => 'success',
-                'message' => $status === 'draft' ? 'Draft saved successfully' : 'Request created successfully',
-                'data' => $req,
-            ], 201);
-
-        } catch (\Exception $e) {
-            Log::error('Request Store Error', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Something went wrong',
                 'error' => $e->getMessage(),
             ], 500);
         }
@@ -931,6 +757,212 @@ class CreateRequestController extends Controller
     //         'message' => 'Request updated successfully',
     //     ]);
     // }
+
+    public function store(Request $request)
+    {
+        try {
+            // ------------------------- VALIDATION ------------------------- //
+            $validated = $request->validate([
+                'entiti' => 'nullable|integer',
+                'user' => 'nullable|integer',
+                'request_type' => 'nullable|integer',
+                'category' => 'nullable|integer',
+                'department' => 'nullable|integer',
+                'amount' => 'nullable|string',
+                'description' => 'nullable|string',
+                'supplier_id' => 'nullable|integer',
+                'expected_date' => 'nullable|string',
+                'priority' => 'nullable|string',
+                'behalf_of' => 'nullable|in:0,1',
+                'behalf_of_department' => 'required_if:behalf_of,1',
+                'business_justification' => 'nullable|string',
+                'status' => 'nullable|in:submitted,draft,deleted,withdraw',
+                'attachments' => 'nullable|array',
+                'attachments.*.document_id' => 'nullable|integer',
+                'attachments.*.file' => 'required|file|max:10240',
+                'budget_code' => 'nullable|exists:budget_codes,id',
+                'behalf_of_buget_code' => 'nullable|exists:budget_codes,id',
+            ]);
+
+            $status = $request->status ?? ModelsRequest::DRAFT;
+
+            // ------------------------- WORKFLOW CHECK ------------------------- //
+            $workflow = null;
+            if ($status !== 'draft') {
+                $workflow = WorkFlow::where('entity_id', $request->entiti)
+                    ->where('categori_id', $request->category)
+                    ->where('request_type_id', $request->request_type)
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if (! $workflow) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Workflow not configured for selected entity, category, and request type',
+                    ], 422);
+                }
+            }
+
+            // ------------------------- CREATE REQUEST WITH TRANSACTION ------------------------- //
+            DB::transaction(function () use ($request, $workflow, $status, &$req) {
+                // Generate Request ID
+                $year = date('Y');
+                $last = ModelsRequest::whereYear('created_at', $year)->orderBy('id', 'desc')->first();
+                $nextNumber = $last ? $last->id + 1 : 1;
+                $request_no = "REQ-{$year}-".str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
+
+                // Create request
+                $req = ModelsRequest::create([
+                    'request_id' => $request_no,
+                    'entiti' => $request->entiti,
+                    'user' => $request->user,
+                    'request_type' => $request->request_type,
+                    'category' => $request->category,
+                    'department' => $request->department,
+                    'budget_code' => $request->budget_code,
+                    'amount' => $request->amount,
+                    'description' => $request->description,
+                    'supplier_id' => $request->supplier_id,
+                    'expected_date' => $request->expected_date,
+                    'priority' => $request->priority,
+                    'behalf_of' => $request->behalf_of,
+                    'behalf_of_department' => $request->behalf_of_department,
+                    'behalf_of_buget_code' => $request->behalf_of_buget_code,
+                    'business_justification' => $request->business_justification,
+                    'status' => $status,
+                ]);
+
+                // Handle attachments
+                if (! empty($request->attachments)) {
+                    foreach ($request->attachments as $index => $doc) {
+                        $file = $request->file("attachments.$index.file");
+                        if (! $file) {
+                            continue;
+                        }
+
+                        $departmentName = Department::find($req->department)->name ?? 'unknown';
+                        $departmentName = str_replace(' ', '_', strtolower($departmentName));
+                        $newFileName = $req->request_id.'_'.$req->entiti.'_'.$departmentName.'_'.$file->getClientOriginalName();
+                        $file->storeAs('requestdocuments', $newFileName, 'public');
+
+                        RequestDocument::create([
+                            'request_id' => $req->request_id,
+                            'document_id' => $doc['document_id'] ?? null,
+                            'document' => $newFileName,
+                        ]);
+                    }
+                }
+
+                // Skip workflow assignment if draft
+                if ($status === 'draft') {
+                    return;
+                }
+
+                // Workflow assignment
+                // Workflow assignment - MODIFIED FOR STEP-BY-STEP NOTIFICATIONS
+                // Workflow assignment - SKIP CREATION STEP
+                $steps = WorkflowStep::where('workflow_id', $workflow->id)
+                    ->orderBy('order_id')
+                    ->get();
+                $approvalSteps = $steps->filter(function ($step) {
+                    return $step->status !== 'Yes';
+                })->values();
+                if ($approvalSteps->isEmpty()) {
+                    $approvalSteps = $steps->slice(1)->values();
+                }
+                foreach ($approvalSteps as $index => $step) {
+                    $isFirstApprovalStep = ($index === 0);
+                    $roleAssigns = WorkflowRoleAssign::where('workflow_id', $workflow->id)
+                        ->where('step_id', $step->id)
+                        ->get();
+                    foreach ($roleAssigns as $roleAssign) {
+                        $users = collect();
+                        if ($roleAssign->specific_user == 1 && $roleAssign->user_id) {
+                            $userIds = json_decode($roleAssign->user_id, true);
+                            $userIds = is_array($userIds) ? $userIds : [$roleAssign->user_id];
+                            $users = User::whereIn('id', $userIds)->get();
+                        } else {
+                            $users = User::whereHas('roles', function ($q) use ($roleAssign) {
+                                $q->where('roles.id', $roleAssign->role_id);
+                            })->get();
+                        }
+                        if ($users->isEmpty()) {
+                            continue;
+                        }
+                        if (strtolower($roleAssign->approval_logic) === 'and') {
+                            foreach ($users as $user) {
+                                RequestWorkflowDetails::create([
+                                    'request_id' => $req->request_id,
+                                    'workflow_id' => $workflow->id,
+                                    'workflow_step_id' => $step->id,
+                                    'workflow_role_id' => $roleAssign->role_id,
+                                    'assigned_user_id' => $user->id,
+                                    'status' => $isFirstApprovalStep ? 'pending' : 'waiting',
+                                    'approval_logic' => strtolower($roleAssign->approval_logic),
+                                    'is_sendback' => 0,
+                                ]);
+
+                                // ONLY send notifications for the FIRST APPROVAL step
+                                if ($isFirstApprovalStep) {
+                                    NotificationService::send(
+                                        $user->id,
+                                        'New Request Assigned',
+                                        "You have been assigned a new request {$req->request_id} to approve.",
+                                        'request_assigned',
+                                        $req->request_id,
+                                        'request',
+                                        'Workflow assignment'
+                                    );
+                                }
+                            }
+                        } else {
+                            $assignedUser = $users->first();
+                            RequestWorkflowDetails::create([
+                                'request_id' => $req->request_id,
+                                'workflow_id' => $workflow->id,
+                                'workflow_step_id' => $step->id,
+                                'workflow_role_id' => $roleAssign->role_id,
+                                'assigned_user_id' => $assignedUser->id,
+                                'status' => $isFirstApprovalStep ? 'pending' : 'waiting',
+                                'approval_logic' => strtolower($roleAssign->approval_logic),
+                                'is_sendback' => 0,
+                            ]);
+
+                            // ONLY send notifications for the FIRST APPROVAL step
+                            if ($isFirstApprovalStep) {
+                                NotificationService::send(
+                                    $assignedUser->id,
+                                    'New Request Assigned',
+                                    "Request {$req->request_id} has been assigned to you for approval.",
+                                    'workflow_assigned',
+                                    $req->request_id,
+                                    'request',
+                                    'Assigned via workflow step '.$step->order_id
+                                );
+                            }
+                        }
+                    }
+                }
+            });
+
+            // ------------------------- RESPONSE ------------------------- //
+            return response()->json([
+                'status' => 'success',
+                'message' => $status === 'draft' ? 'Draft saved successfully' : 'Request created successfully',
+                'data' => $req,
+            ], 201);
+
+        } catch (\Exception $e) {
+            Log::error('Request Store Error', ['error' => $e->getMessage()]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Something went wrong',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function update(Request $request, $id)
     {
         $req = ModelsRequest::find($id);
@@ -1055,7 +1087,17 @@ class CreateRequestController extends Controller
                         ->orderBy('order_id')
                         ->get();
 
-                    foreach ($steps as $step) {
+                    // Filter out creation steps
+                    $approvalSteps = $steps->filter(function ($step) {
+                        return $step->status !== 'Yes';
+                    })->values();
+
+                    if ($approvalSteps->isEmpty()) {
+                        $approvalSteps = $steps->slice(1)->values();
+                    }
+
+                    foreach ($approvalSteps as $index => $step) {
+                        $isFirstApprovalStep = ($index === 0);
                         $roleAssigns = WorkflowRoleAssign::where('workflow_id', $workflow->id)
                             ->where('step_id', $step->id)
                             ->get();
@@ -1084,20 +1126,22 @@ class CreateRequestController extends Controller
                                         'workflow_step_id' => $step->id,
                                         'workflow_role_id' => $roleAssign->role_id,
                                         'assigned_user_id' => $user->id,
-                                        'status' => 'pending',
+                                        'status' => $isFirstApprovalStep ? 'pending' : 'waiting',
                                         'approval_logic' => strtolower($roleAssign->approval_logic),
                                         'is_sendback' => 0,
                                     ]);
 
-                                    NotificationService::send(
-                                        $user->id,
-                                        'New Request Assigned',
-                                        "You have been assigned a new request {$req->request_id} to approve.",
-                                        'request_assigned',
-                                        $req->request_id,
-                                        'request',
-                                        'Workflow assignment'
-                                    );
+                                    if ($isFirstApprovalStep) {
+                                        NotificationService::send(
+                                            $user->id,
+                                            'New Request Assigned',
+                                            "You have been assigned a new request {$req->request_id} to approve.",
+                                            'request_assigned',
+                                            $req->request_id,
+                                            'request',
+                                            'Workflow assignment'
+                                        );
+                                    }
                                 }
                             } else {
                                 $assignedUser = $users->first();
@@ -1107,20 +1151,22 @@ class CreateRequestController extends Controller
                                     'workflow_step_id' => $step->id,
                                     'workflow_role_id' => $roleAssign->role_id,
                                     'assigned_user_id' => $assignedUser->id,
-                                    'status' => 'pending',
+                                    'status' => $isFirstApprovalStep ? 'pending' : 'waiting',
                                     'approval_logic' => strtolower($roleAssign->approval_logic),
                                     'is_sendback' => 0,
                                 ]);
 
-                                NotificationService::send(
-                                    $assignedUser->id,
-                                    'New Request Assigned',
-                                    "Request {$req->request_id} has been assigned to you for approval.",
-                                    'workflow_assigned',
-                                    $req->request_id,
-                                    'request',
-                                    'Assigned via workflow step '.$step->order_id
-                                );
+                                if ($isFirstApprovalStep) {
+                                    NotificationService::send(
+                                        $assignedUser->id,
+                                        'New Request Assigned',
+                                        "Request {$req->request_id} has been assigned to you for approval.",
+                                        'workflow_assigned',
+                                        $req->request_id,
+                                        'request',
+                                        'Assigned via workflow step '.$step->order_id
+                                    );
+                                }
                             }
                         }
                     }
@@ -1626,6 +1672,11 @@ class CreateRequestController extends Controller
                     ? \Carbon\Carbon::parse($req->expected_date)->format('Y-m-d')
                     : null;
 
+                $rejectionRemark = $req->workflowDetails()
+                    ->where('status', 'rejected')
+                    ->latest()
+                    ->value('remark');
+
                 return [
                     'id' => $req->id,
                     'request_id' => $req->request_id,
@@ -1633,6 +1684,7 @@ class CreateRequestController extends Controller
                     'priority' => $req->priority,
                     'description' => $req->description,
                     'business_justification' => $req->business_justification,
+                    'remark' => $rejectionRemark,
                     'status' => $req->status,
                     'final_status' => $finalStatus['final_status'],
                     'pending_by' => $finalStatus['pending_by'],

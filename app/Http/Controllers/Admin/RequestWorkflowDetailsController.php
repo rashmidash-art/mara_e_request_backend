@@ -93,6 +93,7 @@ class RequestWorkflowDetailsController extends Controller
     /**
      * Take workflow action (approve/reject/sendback)
      */
+
     // public function takeAction(Request $request, $request_id)
     // {
     //     $validated = $request->validate([
@@ -350,6 +351,52 @@ class RequestWorkflowDetailsController extends Controller
         }
     }
 
+    private function triggerNextStepNotifications($request_id, $current_step_id)
+    {
+        $currentStep = RequestWorkflowDetails::where('request_id', $request_id)
+            ->where('workflow_step_id', $current_step_id)
+            ->first();
+
+        if (! $currentStep) {
+            return;
+        }
+
+        // Find the next step - FIXED: Don't use group_by, use distinct with orderBy
+        $nextStep = RequestWorkflowDetails::where('request_id', $request_id)
+            ->where('workflow_step_id', '>', $current_step_id)
+            ->where('status', 'waiting')
+            ->orderBy('workflow_step_id', 'asc')
+            ->first();
+
+        if (! $nextStep) {
+            return;
+        }
+
+        // Get all users in the next step
+        $nextStepUsers = RequestWorkflowDetails::where('request_id', $request_id)
+            ->where('workflow_step_id', $nextStep->workflow_step_id)
+            ->where('status', 'waiting')
+            ->get();
+
+        $requestData = ModelsRequest::where('request_id', $request_id)->first();
+
+        foreach ($nextStepUsers as $stepUser) {
+            // Update status from 'waiting' to 'pending' for the next step
+            $stepUser->update(['status' => 'pending']);
+
+            // Send notification
+            NotificationService::send(
+                $stepUser->assigned_user_id,
+                'New Request Assigned',
+                "Request {$request_id} has been assigned to you for approval.",
+                'workflow_assigned',
+                $request_id,
+                'request',
+                'Assigned via workflow step'
+            );
+        }
+    }
+
     public function takeAction(Request $request, $request_id)
     {
         $validated = $request->validate([
@@ -420,7 +467,6 @@ class RequestWorkflowDetailsController extends Controller
                     'action_taken_by' => $user->id,
                 ]);
 
-                //  After AND logic: check if all approved, then reset next step's sendback flags
                 if ($logic === 'and') {
                     $pendingApprovals = RequestWorkflowDetails::where('request_id', $request_id)
                         ->where('workflow_step_id', $current->workflow_step_id)
@@ -430,6 +476,9 @@ class RequestWorkflowDetailsController extends Controller
                     if ($pendingApprovals === 0) {
                         // Reset is_sendback on the next step
                         $this->resetNextStepSendback($request_id, $current->workflow_step_id);
+
+                        // TRIGGER NOTIFICATIONS FOR NEXT STEP
+                        $this->triggerNextStepNotifications($request_id, $current->workflow_step_id);
 
                         NotificationService::send(
                             $requestData->user,
@@ -442,8 +491,9 @@ class RequestWorkflowDetailsController extends Controller
                         );
                     }
                 } else {
-                    //  single logic: reset next step's sendback flags immediately
                     $this->resetNextStepSendback($request_id, $current->workflow_step_id);
+
+                    $this->triggerNextStepNotifications($request_id, $current->workflow_step_id);
 
                     NotificationService::send(
                         $requestData->user,
@@ -465,8 +515,9 @@ class RequestWorkflowDetailsController extends Controller
                         'action_taken_by' => $user->id,
                     ]);
 
-                //  OR logic: reset next step's sendback flags
                 $this->resetNextStepSendback($request_id, $current->workflow_step_id);
+
+                $this->triggerNextStepNotifications($request_id, $current->workflow_step_id);
 
                 NotificationService::send(
                     $requestData->user,
@@ -513,7 +564,8 @@ class RequestWorkflowDetailsController extends Controller
 
         // ------------------ SENDBACK ------------------ //
         if ($request->action === 'sendback') {
-            //  Mark ALL records of current step as sentback (not just current user's)
+
+            // mark current step as sendback
             RequestWorkflowDetails::where('request_id', $request_id)
                 ->where('workflow_step_id', $current->workflow_step_id)
                 ->update([
@@ -524,45 +576,28 @@ class RequestWorkflowDetailsController extends Controller
                     'status' => 'sentback',
                 ]);
 
-            // Find previous step
-            $previousStep = RequestWorkflowDetails::where('request_id', $request_id)
-                ->where('workflow_step_id', '<', $current->workflow_step_id)
-                ->orderByDesc('workflow_step_id')
-                ->first();
+            // convert request to draft
+            $requestData->update([
+                'status' => 'draft',
+            ]);
 
-            if ($previousStep) {
-                //  Reset ALL records of the previous step back to pending
-                RequestWorkflowDetails::where('request_id', $request_id)
-                    ->where('workflow_step_id', $previousStep->workflow_step_id)
-                    ->update(['status' => 'pending', 'action_taken_by' => null]);
+            // remove workflow steps
+            RequestWorkflowDetails::where('request_id', $request_id)->delete();
 
-                NotificationService::send(
-                    $previousStep->assigned_user_id,
-                    'Request Sent Back',
-                    "Request {$requestData->request_id} has been sent back by {$user->name}. Remark: {$request->remark}",
-                    'request_sendback',
-                    $requestData->request_id,
-                    'request',
-                    'Workflow sendback'
-                );
-            } else {
-                $requestData->update(['status' => 'draft']);
-                RequestWorkflowDetails::where('request_id', $request_id)->delete();
+            NotificationService::send(
+                $requestData->user,
+                'Request Sent Back',
+                "Your request {$requestData->request_id} has been sent back to draft by {$user->name}. Remark: {$request->remark}",
+                'request_sendback',
+                $requestData->request_id,
+                'request',
+                'Workflow sendback'
+            );
 
-                NotificationService::send(
-                    $requestData->user,
-                    'Request Sent Back to Draft',
-                    "Your request {$requestData->request_id} has been sent back to draft by {$user->name}. Remark: {$request->remark}",
-                    'request_sendback',
-                    $requestData->request_id,
-                    'request',
-                    'Workflow sendback to draft'
-                );
-            }
-
-            $this->syncRequestStatus($request_id);
-
-            return response()->json(['status' => 'success', 'message' => 'Sent back successfully']);
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Request sent back to draft successfully',
+            ]);
         }
     }
 

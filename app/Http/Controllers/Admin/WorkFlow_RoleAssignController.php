@@ -366,7 +366,7 @@ class WorkFlow_RoleAssignController extends Controller
                 $join->on('ws.id', '=', 'wra.step_id')
                     ->where('wra.workflow_id', $workflow_id);
             })
-            ->where('ws.escalation', 'enable')  // Only steps with escalation enabled
+            ->where('ws.status', 'No')
             ->select('ws.id', 'ws.name', 'ws.order_id')
             ->select('ws.id', 'ws.name', 'ws.order_id', 'ws.sla_hour')
             ->distinct()
@@ -386,12 +386,10 @@ class WorkFlow_RoleAssignController extends Controller
             ->where('workflow_id', $workflow_id)
             ->distinct()
             ->pluck('step_id');
-
-        // Get unassigned steps with escalation enabled
         $unassignedSteps = DB::table('workflow_steps as ws')
             ->where('ws.workflow_id', $workflow_id)
-            ->where('ws.escalation', 'enable')  // Only steps with escalation enabled
-            ->whereNotIn('ws.id', $assignedStepIds)  // Steps not yet assigned
+            ->where('ws.status', 'No')
+            ->whereNotIn('ws.id', $assignedStepIds)
             ->select('ws.id', 'ws.name', 'ws.order_id')
             ->orderBy('ws.order_id', 'ASC')
             ->get();
@@ -401,4 +399,32 @@ class WorkFlow_RoleAssignController extends Controller
             'steps' => $unassignedSteps,
         ]);
     }
+
+    public function getEscalationSteps($workflow_id)
+{
+    $steps = DB::table('workflow_steps as ws')
+        ->join('workflow_role_assigns as wra', function ($join) use ($workflow_id) {
+            $join->on('ws.id', '=', 'wra.step_id')
+                ->where('wra.workflow_id', $workflow_id);
+        })
+        ->where('ws.status', 'No')
+        ->where('ws.escalation', 'enable')
+
+        // exclude steps where escalation already created
+        ->whereNotIn('ws.id', function ($query) use ($workflow_id) {
+            $query->select('step_id')
+                ->from('escalations')
+                ->where('workflow_id', $workflow_id);
+        })
+
+        ->select('ws.id', 'ws.name', 'ws.order_id', 'ws.sla_hour')
+        ->distinct()
+        ->orderBy('ws.order_id', 'ASC')
+        ->get();
+
+    return response()->json([
+        'status' => 'success',
+        'steps' => $steps,
+    ]);
+}
 }

@@ -159,11 +159,13 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::get('workflow/{id}/steps', action: [WorkFlowStepsController::class, 'getStepByWorkflow']);
 
         Route::apiResource('workflowsteps', WorkFlowStepsController::class);
-        Route::get('workflow/{id}/steps', action: [WorkFlowStepsController::class, 'getStepByWorkflow']);
+        // Route::get('workflow/{id}/steps', action: [WorkFlowStepsController::class, 'getStepByWorkflow']);
         Route::post('workflowsteps/reorder', [WorkFlowStepsController::class, 'reorder']);
 
         Route::get('workflow/{workflow_id}/assigned-steps', [WorkFlow_RoleAssignController::class, 'getAssignedSteps']);
         Route::get('workflow/{workflow_id}/unassigned-steps', [WorkFlow_RoleAssignController::class, 'getUnassignedSteps']);
+
+         Route::get('workflow/{workflow_id}/escalation-steps', [WorkFlow_RoleAssignController::class, 'getEscalationSteps']);
 
         Route::apiResource('workflow_role/assign', WorkFlow_RoleAssignController::class);
 
