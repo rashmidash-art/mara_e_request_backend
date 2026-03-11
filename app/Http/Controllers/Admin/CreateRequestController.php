@@ -1192,10 +1192,47 @@ class CreateRequestController extends Controller
                 $req->refresh()->recalculateStatus();
             }
 
-            if ($request->hasFile('delivery_documents')) {
+            // -------------------------- DELIVERY -------------------------- //
+
+            if (
+                $request->hasFile('delivery_documents') ||
+                $request->filled('delivery_number') ||
+                $request->is_delivery_completed == 1
+            ) {
+
                 if (! $req->poDetails()->exists()) {
                     throw new \Exception('Upload PO before delivery');
                 }
+
+                // CASE 1: Checkbox checked, no data
+                if (
+                    $request->is_delivery_completed == 1 &&
+                    ! $request->filled('delivery_number') &&
+                    ! $request->hasFile('delivery_documents')
+                ) {
+
+                    DeliveryOrerDetails::create([
+                        'request_id' => $req->request_id,
+                        'is_delivery_completed' => 1,
+                        'delivery_number' => null,
+                        'delivery_date' => null,
+                        'delivery_quantity' => null,
+                        'delivery_documents' => null,
+                        'status' => 'completed',
+                    ]);
+
+                    $req->refresh()->recalculateStatus();
+
+                    return;
+                }
+
+                // CASE 2: If delivery number entered → require all fields
+                $request->validate([
+                    'delivery_number' => 'required|string',
+                    'delivery_date' => 'required|date',
+                    'delivery_quantity' => 'required|numeric',
+                    'delivery_documents' => 'required|file',
+                ]);
 
                 $file = $request->file('delivery_documents');
                 $name = 'delivery_'.$req->request_id.'_'.time().'_'.$file->getClientOriginalName();
@@ -1214,10 +1251,47 @@ class CreateRequestController extends Controller
                 $req->refresh()->recalculateStatus();
             }
 
-            if ($request->hasFile('payment_documents')) {
+            // -------------------------- PAYMENT -------------------------- //
+
+            if (
+                $request->hasFile('payment_documents') ||
+                $request->filled('payment_number') ||
+                $request->is_payment_completed == 1
+            ) {
+
                 if (! $req->deliveries()->exists()) {
                     throw new \Exception('Complete delivery before payment');
                 }
+
+                // CASE 1: Checkbox checked, no data
+                if (
+                    $request->is_payment_completed == 1 &&
+                    ! $request->filled('payment_number') &&
+                    ! $request->hasFile('payment_documents')
+                ) {
+
+                    PaymentDetails::create([
+                        'request_id' => $req->request_id,
+                        'is_payment_completed' => 1,
+                        'payment_number' => null,
+                        'payment_amount' => null,
+                        'payment_date' => null,
+                        'payment_documents' => null,
+                        'status' => 'completed',
+                    ]);
+
+                    $req->refresh()->recalculateStatus();
+
+                    return;
+                }
+
+                // CASE 2: If payment number entered → require all fields
+                $request->validate([
+                    'payment_number' => 'required|string',
+                    'payment_amount' => 'required|numeric',
+                    'payment_date' => 'required|date',
+                    'payment_documents' => 'required|file',
+                ]);
 
                 $file = $request->file('payment_documents');
                 $name = 'payment_'.$req->request_id.'_'.time().'_'.$file->getClientOriginalName();
@@ -1235,6 +1309,50 @@ class CreateRequestController extends Controller
 
                 $req->refresh()->recalculateStatus();
             }
+
+            // if ($request->hasFile('delivery_documents')) {
+            //     if (! $req->poDetails()->exists()) {
+            //         throw new \Exception('Upload PO before delivery');
+            //     }
+
+            //     $file = $request->file('delivery_documents');
+            //     $name = 'delivery_'.$req->request_id.'_'.time().'_'.$file->getClientOriginalName();
+            //     $file->storeAs('request_documents', $name, 'public');
+
+            //     DeliveryOrerDetails::create([
+            //         'request_id' => $req->request_id,
+            //         'is_delivery_completed' => $request->is_delivery_completed == 1 ? 1 : 0,
+            //         'delivery_number' => $request->delivery_number,
+            //         'delivery_date' => $request->delivery_date,
+            //         'delivery_quantity' => $request->delivery_quantity,
+            //         'delivery_documents' => $name,
+            //         'status' => 'completed',
+            //     ]);
+
+            //     $req->refresh()->recalculateStatus();
+            // }
+
+            // if ($request->hasFile('payment_documents')) {
+            //     if (! $req->deliveries()->exists()) {
+            //         throw new \Exception('Complete delivery before payment');
+            //     }
+
+            //     $file = $request->file('payment_documents');
+            //     $name = 'payment_'.$req->request_id.'_'.time().'_'.$file->getClientOriginalName();
+            //     $file->storeAs('request_documents', $name, 'public');
+
+            //     PaymentDetails::create([
+            //         'request_id' => $req->request_id,
+            //         'is_payment_completed' => $request->is_payment_completed == 1 ? 1 : 0,
+            //         'payment_number' => $request->payment_number,
+            //         'payment_amount' => $request->payment_amount,
+            //         'payment_date' => $request->payment_date,
+            //         'payment_documents' => $name,
+            //         'status' => 'completed',
+            //     ]);
+
+            //     $req->refresh()->recalculateStatus();
+            // }
 
             // -------------------------- SUPPLIER RATING -------------------------- //
             if ($request->filled('rating')) {
@@ -1592,26 +1710,50 @@ class CreateRequestController extends Controller
                 | 5️⃣ Delivery Completed
                 |--------------------------------------------------------------------------
                 */
-                foreach ($req->deliveries as $delivery) {
+                // foreach ($req->deliveries as $delivery) {
+                //     $statusTimeline[] = [
+                //         'stage' => 'Delivery Completed',
+                //         'status' => 'delivery completed',
+                //         'actor_name' => 'System',
+                //         'date' => \Carbon\Carbon::parse($delivery->delivery_date)->format('Y-m-d'),
+                //     ];
+                // }
+                $finalDelivery = $req->deliveries()
+                    ->where('is_delivery_completed', 1)
+                    ->first();
+
+                if ($finalDelivery) {
                     $statusTimeline[] = [
                         'stage' => 'Delivery Completed',
                         'status' => 'delivery completed',
                         'actor_name' => 'System',
-                        'date' => \Carbon\Carbon::parse($delivery->delivery_date)->format('Y-m-d'),
+                        'date' => \Carbon\Carbon::parse($finalDelivery->delivery_date)->format('Y-m-d'),
                     ];
                 }
-
                 /*
                 |--------------------------------------------------------------------------
                 | 6️⃣ Payment Completed
                 |--------------------------------------------------------------------------
                 */
-                foreach ($req->payments as $payment) {
+                // foreach ($req->payments as $payment) {
+                //     $statusTimeline[] = [
+                //         'stage' => 'Payment Completed',
+                //         'status' => 'payment completed',
+                //         'actor_name' => 'System',
+                //         'date' => \Carbon\Carbon::parse($payment->payment_date)->format('Y-m-d'),
+                //     ];
+                // }
+
+                $finalPayment = $req->payments()
+                    ->where('is_payment_completed', 1)
+                    ->first();
+
+                if ($finalPayment) {
                     $statusTimeline[] = [
                         'stage' => 'Payment Completed',
                         'status' => 'payment completed',
                         'actor_name' => 'System',
-                        'date' => \Carbon\Carbon::parse($payment->payment_date)->format('Y-m-d'),
+                        'date' => \Carbon\Carbon::parse($finalPayment->payment_date)->format('Y-m-d'),
                     ];
                 }
 
@@ -1745,10 +1887,20 @@ class CreateRequestController extends Controller
                     'po_amount' => $req->poDetails?->po_amount ?? 0,
                     'total_paid' => $req->payments()->sum('payment_amount') ?? 0,
 
+                    // 'status_flags' => [
+                    //     'is_po_created' => $req->poDetails()->exists() ? 1 : 0,
+                    //     'is_delivery_completed' => $req->deliveries()->exists() ? 1 : 0,
+                    //     'is_payment_completed' => $req->payments()->exists() ? 1 : 0,
+                    // ],
+
                     'status_flags' => [
                         'is_po_created' => $req->poDetails()->exists() ? 1 : 0,
-                        'is_delivery_completed' => $req->deliveries()->exists() ? 1 : 0,
-                        'is_payment_completed' => $req->payments()->exists() ? 1 : 0,
+                        'is_delivery_completed' => $req->deliveries()
+                            ->where('is_delivery_completed', 1)
+                            ->exists() ? 1 : 0,
+                        'is_payment_completed' => $req->payments()
+                            ->where('is_payment_completed', 1)
+                            ->exists() ? 1 : 0,
                     ],
 
                     /* ================= DOCUMENT DETAILS ================= */
@@ -1767,6 +1919,7 @@ class CreateRequestController extends Controller
                             'number' => $delivery->delivery_number,
                             'date' => $delivery->delivery_date,
                             'quantity' => $delivery->delivery_quantity,
+                            'is_delivery_completed' => $delivery->is_delivery_completed,
                             'file' => $delivery->delivery_documents
                                 ? asset('storage/request_documents/'.$delivery->delivery_documents)
                                 : null,
@@ -1778,6 +1931,8 @@ class CreateRequestController extends Controller
                             'number' => $payment->payment_number,
                             'date' => $payment->payment_date,
                             'amount' => $payment->payment_amount,
+                            'is_payment_completed' => $payment->is_payment_completed,
+
                             'file' => $payment->payment_documents
                                 ? asset('storage/request_documents/'.$payment->payment_documents)
                                 : null,

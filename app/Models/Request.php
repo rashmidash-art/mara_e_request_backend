@@ -181,6 +181,100 @@ class Request extends Model
         // }
     }
 
+    // public function recalculateStatus()
+    // {
+    //     if (in_array($this->status, [
+    //         self::CLOSED,
+    //         self::WITHDRAW,
+    //         self::REJECT,
+    //     ])) {
+    //         return;
+    //     }
+
+    //     $steps = $this->workflowDetails()->get();
+
+    //     if ($steps->isEmpty()) {
+    //         return;
+    //     }
+
+    //     /*
+    //     |--------------------------------------------------------------------------
+    //     |  REJECT
+    //     |--------------------------------------------------------------------------
+    //     */
+    //     if ($steps->contains('status', 'rejected')) {
+    //         $this->changeStatus(self::REJECT);
+
+    //         return;
+    //     }
+
+    //     /*
+    //     |--------------------------------------------------------------------------
+    //     |  IN APPROVAL (MIXED)
+    //     |--------------------------------------------------------------------------
+    //     */
+    //     if (
+    //         $steps->contains('status', 'approved') &&
+    //         $steps->contains('status', 'pending')
+    //     ) {
+    //         $this->changeStatus(self::IN_APPROVAL);
+
+    //         return;
+    //     }
+
+    //     /*
+    //     |--------------------------------------------------------------------------
+    //     |  SUBMITTED (ALL PENDING)
+    //     |--------------------------------------------------------------------------
+    //     */
+    //     if ($steps->every(fn ($s) => $s->status === 'pending')) {
+    //         $this->changeStatus(self::SUBMITTED);
+
+    //         return;
+    //     }
+
+    //     /*
+    //     |--------------------------------------------------------------------------
+    //     |  FULLY APPROVED
+    //     |--------------------------------------------------------------------------
+    //     */
+    //     if ($steps->every(fn ($s) => $s->status === 'approved')) {
+
+    //         // Check if PO exists (any PO)
+    //         if (! $this->poDetails()->exists()) {
+    //             $this->changeStatus(self::APPROVE);
+
+    //             return;
+    //         }
+
+    //         // Check if ANY delivery exists (partial or complete)
+    //         if (! $this->deliveries()->exists()) {
+    //             $this->changeStatus(self::PO_CREATED);
+
+    //             return;
+    //         }
+
+    //         // Check if ANY payment exists (partial or complete)
+    //         if (! $this->payments()->exists()) {
+    //             $this->changeStatus(self::DELIVERY_COMPLETED);
+
+    //             return;
+    //         }
+
+    //         // Check if rating exists
+    //         if (! $this->supplierRating()->exists()) {
+    //             $this->changeStatus(self::PAYMENT_COMPLETED);
+
+    //             return;
+    //         }
+
+    //         // All done
+    //         $this->changeStatus(self::SUPPLIER_RATING);
+
+    //         return;
+    //     }
+    // }
+
     public function poDetails()
     {
         return $this->hasOne(PoUploadDetalils::class, 'request_id', 'request_id');
