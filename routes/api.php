@@ -50,7 +50,6 @@ Route::post('password/reset', [PasswordResetContrller::class, 'reset']);
 // Route::get('/azure/callback', '\App\Http\Middleware\AppAzure@azurecallback')
 //     ->name('azure.callback');
 
-// Route::get('/logout/azure', '\App\Http\Middleware\AppAzure@azurelogout')
 //     ->name('azure.logout');
 
 // Need to configure

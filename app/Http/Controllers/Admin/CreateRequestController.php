@@ -2017,29 +2017,39 @@ class CreateRequestController extends Controller
 
             $lifecycleTimeline = [];
 
-            $doc = $requestData->requestDetailsDocuments;
-
-            if ($doc?->is_po_created) {
+            /* PO Created */
+            if ($requestData->poDetails) {
                 $lifecycleTimeline[] = [
                     'label' => 'PO Created',
-                    'date' => $doc->po_date,
+                    'date' => $requestData->poDetails->po_date,
                 ];
             }
 
-            if ($doc?->is_delivery_completed) {
+            /* Delivery Completed */
+            $deliveryCompleted = $requestData->deliveries
+                ->where('is_delivery_completed', 1)
+                ->first();
+
+            if ($deliveryCompleted) {
                 $lifecycleTimeline[] = [
                     'label' => 'Delivery Completed',
-                    'date' => $doc->delivery_completed_date,
+                    'date' => $deliveryCompleted->created_at?->format('Y-m-d'),
                 ];
             }
 
-            if ($doc?->is_payment_completed) {
+            /* Payment Completed */
+            $paymentCompleted = $requestData->payments
+                ->where('is_payment_completed', 1)
+                ->first();
+
+            if ($paymentCompleted) {
                 $lifecycleTimeline[] = [
                     'label' => 'Payment Completed',
-                    'date' => $doc->payment_completed_date,
+                    'date' => $paymentCompleted->created_at?->format('Y-m-d'),
                 ];
             }
 
+            /* Supplier Rated */
             if ($requestData->supplierRating) {
                 $lifecycleTimeline[] = [
                     'label' => 'Supplier Rated',
@@ -2047,6 +2057,7 @@ class CreateRequestController extends Controller
                 ];
             }
 
+            /* Closed */
             if ($requestData->status === 'closed') {
                 $lifecycleTimeline[] = [
                     'label' => 'Closed',
