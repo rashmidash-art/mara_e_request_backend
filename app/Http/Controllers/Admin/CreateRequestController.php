@@ -186,6 +186,12 @@ class CreateRequestController extends Controller
                     }
                 }
 
+                $isBehalf = $req->behalf_of == 1;
+
+                $departmentId = $isBehalf ? $req->behalf_of_department : $req->department;
+
+                $department = \App\Models\Department::find($departmentId);
+
                 return [
                     'id' => $req->id,
                     'request_id' => $req->request_id,
@@ -207,7 +213,12 @@ class CreateRequestController extends Controller
                     ],
                     'category' => ['id' => $req->category,    'name' => $req->categoryData?->name],
                     'entity' => ['id' => $req->entiti,      'name' => $req->entityData?->name],
-                    'department' => ['id' => $req->department,  'name' => $req->departmentData?->name],
+
+                    'department' => [
+                        'id' => $department?->id,
+                        'name' => $department?->name,
+                    ],
+
                     'budget_code' => ['id' => $req->budget_code, 'name' => $req->budgetCode?->budget_code],
                     'requested_by' => ['id' => $req->user,        'name' => $req->userData?->name],
                     'request_type' => ['id' => $req->request_type, 'name' => $req->requestTypeData?->name],
