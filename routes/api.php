@@ -28,6 +28,9 @@ use App\Http\Controllers\Admin\WorkFlowStepsController;
 use App\Http\Controllers\Admin\WorkFlowTypeController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetContrller;
+use App\Http\Controllers\Dashboard\EntityDashboardController;
+use App\Http\Controllers\Dashboard\SuperAdminDashboardController;
+use App\Http\Controllers\Dashboard\UserDashboardController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -70,6 +73,11 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         return response()->json($request->user());
 
     });
+
+    Route::apiResource('dashboard-superadmin', SuperAdminDashboardController::class);
+    Route::apiResource('dashboard-entity', EntityDashboardController::class);
+    Route::apiResource('dashboard-user', UserDashboardController::class);
+
     // -----------------------------
     // Roles Management (Dynamic CRUD)
     // Only accessible by Admin
@@ -165,7 +173,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
         Route::get('workflow/{workflow_id}/assigned-steps', [WorkFlow_RoleAssignController::class, 'getAssignedSteps']);
         Route::get('workflow/{workflow_id}/unassigned-steps', [WorkFlow_RoleAssignController::class, 'getUnassignedSteps']);
 
-         Route::get('workflow/{workflow_id}/escalation-steps', [WorkFlow_RoleAssignController::class, 'getEscalationSteps']);
+        Route::get('workflow/{workflow_id}/escalation-steps', [WorkFlow_RoleAssignController::class, 'getEscalationSteps']);
 
         Route::apiResource('workflow_role/assign', WorkFlow_RoleAssignController::class);
 

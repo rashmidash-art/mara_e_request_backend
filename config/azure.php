@@ -34,7 +34,8 @@ return [
     | This value is equal to the 'Object ID' as found in the Azure portal
     |
     */
-    'resource' => env('AZURE_RESOURCE', ''),
+    // 'resource' => env('AZURE_RESOURCE', ''),
+    'resource' => null,
 
     /*
     |--------------------------------------------------------------------------
@@ -46,8 +47,9 @@ return [
     | https://azure.microsoft.com/en-us/updates/app-service-auth-and-azure-ad-domain-hints/
     |
     */
-    'domain_hint' => env('AZURE_DOMAIN_HINT', ''),
+    // 'domain_hint' => env('AZURE_DOMAIN_HINT', ''),
 
+    'domain_hint' => env('AZURE_DOMAIN_HINT', ''),
     /*
     |--------------------------------------------------------------------------
     | Permission Scope
@@ -57,5 +59,7 @@ return [
     | https://docs.microsoft.com/en-us/graph/api/resources/users?view=graph-rest-1.0
     |
     */
-    'scope' => env('AZURE_SCOPE', 'User.Read'),
+    // 'scope' => env('AZURE_SCOPE', 'User.Read'),
+        'scope' => env('AZURE_SCOPE', 'openid profile email User.Read'),
+
 ];

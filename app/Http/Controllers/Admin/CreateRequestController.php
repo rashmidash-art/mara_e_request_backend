@@ -192,6 +192,7 @@ class CreateRequestController extends Controller
                     'amount' => $req->amount,
                     'priority' => $req->priority,
                     'description' => $req->description,
+                    'business_justification' => $req->business_justification,
                     'status' => $req->status,
                     'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
                     'updated_at' => $req->updated_at?->format('Y-m-d H:i:s'),
@@ -986,11 +987,10 @@ class CreateRequestController extends Controller
 
                 $req->update(['status' => 'draft']);
 
-                // RequestWorkflowDetails::where('request_id', $req->request_id)
-                //     ->where('status', 'pending')
-                //     ->update(['status' => 'cancelled']);
-
+                // Delete workflow details
                 RequestWorkflowDetails::where('request_id', $req->request_id)->delete();
+
+                // DON'T delete documents here - keep them for when user edits
 
                 return response()->json([
                     'status' => 'success',
@@ -1037,7 +1037,25 @@ class CreateRequestController extends Controller
                 'attachments' => 'nullable|array',
                 'attachments.*.document_id' => 'nullable|integer',
                 'attachments.*.file' => 'required|file|max:10240',
+                // Add this to handle removed documents
+                'removed_documents' => 'nullable|array',
+                'removed_documents.*' => 'integer|exists:request_documents,id',
             ]);
+
+            if ($request->has('removed_documents') && is_array($request->removed_documents)) {
+                foreach ($request->removed_documents as $documentId) {
+                    $document = RequestDocument::find($documentId);
+                    if ($document) {
+                        // Delete the file from storage
+                        $filePath = storage_path('app/public/requestdocuments/'.$document->document);
+                        if (file_exists($filePath)) {
+                            unlink($filePath);
+                        }
+                        // Delete the record
+                        $document->delete();
+                    }
+                }
+            }
 
             $req->update($request->only([
                 'entiti', 'user', 'request_type', 'category', 'department',
@@ -1046,6 +1064,7 @@ class CreateRequestController extends Controller
                 'business_justification', 'status',
             ]));
 
+            // -------------------------- ATTACHMENTS -------------------------- //
             // -------------------------- ATTACHMENTS -------------------------- //
             if (! empty($request->attachments)) {
                 foreach ($request->attachments as $index => $doc) {
@@ -1067,7 +1086,6 @@ class CreateRequestController extends Controller
                     ]);
                 }
             }
-
             // -------------------------- DRAFT → SUBMITTED: RECREATE WORKFLOW -------------------------- //
             if ($oldStatus === 'draft' && $request->status === 'submitted') {
 
@@ -1392,7 +1410,7 @@ class CreateRequestController extends Controller
     public function show($id)
     {
         try {
-            $req = ModelsRequest::find($id);
+            $req = ModelsRequest::with(['documents'])->find($id); // Eager load documents
 
             if (! $req) {
                 return response()->json([
@@ -1401,7 +1419,15 @@ class CreateRequestController extends Controller
                 ], 404);
             }
 
-            $documents = RequestDocument::where('request_id', $req->id)->get();
+            $documents = $req->documents->map(function ($doc) {
+                return [
+                    'document_id' => $doc->document_id,
+                    'file_name' => $doc->document,
+                    'url' => asset('storage/requestdocuments/'.$doc->document),
+                    // Extract original filename from stored filename
+                    'original_name' => $this->extractOriginalFilename($doc->document),
+                ];
+            });
 
             return response()->json([
                 'status' => 'success',
@@ -1420,6 +1446,15 @@ class CreateRequestController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    // Helper method to extract original filename
+    private function extractOriginalFilename($storedFilename)
+    {
+        $parts = explode('_', $storedFilename);
+        $originalParts = array_slice($parts, 3);
+
+        return implode('_', $originalParts);
     }
 
     // public function update(Request $request, $id)
@@ -1598,9 +1633,6 @@ class CreateRequestController extends Controller
                 /* ======================================================
                  * 1. Workflow timeline (deduplicated)
                  * ====================================================== */
-                /* ======================================================
-                   1. Workflow timeline (deduplicated)
-                ====================================================== */
                 $workflowTimeline = $req->workflowHistory
                     ->groupBy('workflow_step_id')
                     ->map(function ($steps) {
@@ -1614,7 +1646,6 @@ class CreateRequestController extends Controller
                             'role' => $steps->pluck('role.name')->unique()->join(', '),
                             'assigned_user' => $lastAction?->assignedUser?->name,
                             'status' => $lastAction?->status ?? 'pending',
-                            // 'date' => $lastAction?->updated_at?->format('Y-m-d'),
                             'date' => $lastAction?->updated_at?->format('Y-m-d H:i'),
                         ];
                     })
@@ -1622,24 +1653,16 @@ class CreateRequestController extends Controller
                     ->toArray();
 
                 /* ======================================================
-                   2. Unified Status Timeline
-                ====================================================== */
+                 * 2. Unified Status Timeline
+                 * ====================================================== */
 
-                // Submitted
                 $statusTimeline = [];
 
                 /*
                 |--------------------------------------------------------------------------
-                | 1️⃣ Submitted
+                | 1️⃣ Submitted (only if not draft or withdraw)
                 |--------------------------------------------------------------------------
                 */
-                // $statusTimeline[] = [
-                //     'stage' => 'Submitted',
-                //     'status' => 'submitted',
-                //     'actor_name' => $req->userData?->name ?? 'Requester',
-                //     'date' => $req->created_at?->format('Y-m-d'),
-                // ];
-
                 if ($req->status !== ModelsRequest::DRAFT && $req->status !== ModelsRequest::WITHDRAW) {
                     $statusTimeline[] = [
                         'stage' => 'Request Submitted',
@@ -1649,6 +1672,11 @@ class CreateRequestController extends Controller
                     ];
                 }
 
+                /*
+                |--------------------------------------------------------------------------
+                | 2️⃣ Draft
+                |--------------------------------------------------------------------------
+                */
                 if ($req->status === ModelsRequest::DRAFT) {
                     $statusTimeline[] = [
                         'stage' => 'Request Converted to Draft',
@@ -1658,6 +1686,11 @@ class CreateRequestController extends Controller
                     ];
                 }
 
+                /*
+                |--------------------------------------------------------------------------
+                | 3️⃣ Withdraw - REMOVED THE EARLY RETURN
+                |--------------------------------------------------------------------------
+                */
                 if ($req->status === ModelsRequest::WITHDRAW) {
                     $statusTimeline[] = [
                         'stage' => 'Withdrawn',
@@ -1665,130 +1698,101 @@ class CreateRequestController extends Controller
                         'actor_name' => $req->userData?->name ?? 'Requester',
                         'date' => $req->updated_at?->format('Y-m-d'),
                     ];
-                }
-                /*
-                |--------------------------------------------------------------------------
-                | 2️⃣ Withdraw
-                |--------------------------------------------------------------------------
-                */
-                if ($req->status === ModelsRequest::WITHDRAW) {
-                    $statusTimeline[] = [
-                        'stage' => 'Withdrawn',
-                        'status' => 'withdraw',
-                        'actor_name' => $req->userData?->name,
-                        'date' => $req->updated_at?->format('Y-m-d'),
-                    ];
 
-                    return $statusTimeline;
-                }
+                    // Don't return here - continue to build the rest of the response
+                } else {
+                    /*
+                    |--------------------------------------------------------------------------
+                    | 4️⃣ Workflow Steps (only if not withdrawn)
+                    |--------------------------------------------------------------------------
+                    */
+                    foreach ($workflowTimeline as $step) {
+                        $statusTimeline[] = $step;
+                    }
 
-                /*
-                |--------------------------------------------------------------------------
-                | 3️⃣ Workflow Steps
-                |--------------------------------------------------------------------------
-                */
-                foreach ($workflowTimeline as $step) {
-                    $statusTimeline[] = $step;
-                }
+                    /*
+                    |--------------------------------------------------------------------------
+                    | 5️⃣ PO Created
+                    |--------------------------------------------------------------------------
+                    */
+                    if ($req->poDetails) {
+                        $statusTimeline[] = [
+                            'stage' => 'PO Created',
+                            'status' => 'po created',
+                            'actor_name' => $req->poDetails->createdBy?->name ?? 'System',
+                            'date' => \Carbon\Carbon::parse($req->poDetails->po_date)->format('Y-m-d'),
+                        ];
+                    }
 
-                /*
-                |--------------------------------------------------------------------------
-                | 4️⃣ PO Created
-                |--------------------------------------------------------------------------
-                */
-                if ($req->poDetails) {
-                    $statusTimeline[] = [
-                        'stage' => 'PO Created',
-                        'status' => 'po created',
-                        'actor_name' => $req->poDetails->createdBy?->name ?? 'System',
-                        'date' => \Carbon\Carbon::parse($req->poDetails->po_date)->format('Y-m-d'),
-                    ];
-                }
+                    /*
+                    |--------------------------------------------------------------------------
+                    | 6️⃣ Delivery Completed
+                    |--------------------------------------------------------------------------
+                    */
+                    $finalDelivery = $req->deliveries()
+                        ->where('is_delivery_completed', 1)
+                        ->first();
 
-                /*
-                |--------------------------------------------------------------------------
-                | 5️⃣ Delivery Completed
-                |--------------------------------------------------------------------------
-                */
-                // foreach ($req->deliveries as $delivery) {
-                //     $statusTimeline[] = [
-                //         'stage' => 'Delivery Completed',
-                //         'status' => 'delivery completed',
-                //         'actor_name' => 'System',
-                //         'date' => \Carbon\Carbon::parse($delivery->delivery_date)->format('Y-m-d'),
-                //     ];
-                // }
-                $finalDelivery = $req->deliveries()
-                    ->where('is_delivery_completed', 1)
-                    ->first();
+                    if ($finalDelivery) {
+                        $statusTimeline[] = [
+                            'stage' => 'Delivery Completed',
+                            'status' => 'delivery completed',
+                            'actor_name' => 'System',
+                            'date' => \Carbon\Carbon::parse($finalDelivery->delivery_date)->format('Y-m-d'),
+                        ];
+                    }
 
-                if ($finalDelivery) {
-                    $statusTimeline[] = [
-                        'stage' => 'Delivery Completed',
-                        'status' => 'delivery completed',
-                        'actor_name' => 'System',
-                        'date' => \Carbon\Carbon::parse($finalDelivery->delivery_date)->format('Y-m-d'),
-                    ];
-                }
-                /*
-                |--------------------------------------------------------------------------
-                | 6️⃣ Payment Completed
-                |--------------------------------------------------------------------------
-                */
-                // foreach ($req->payments as $payment) {
-                //     $statusTimeline[] = [
-                //         'stage' => 'Payment Completed',
-                //         'status' => 'payment completed',
-                //         'actor_name' => 'System',
-                //         'date' => \Carbon\Carbon::parse($payment->payment_date)->format('Y-m-d'),
-                //     ];
-                // }
+                    /*
+                    |--------------------------------------------------------------------------
+                    | 7️⃣ Payment Completed
+                    |--------------------------------------------------------------------------
+                    */
+                    $finalPayment = $req->payments()
+                        ->where('is_payment_completed', 1)
+                        ->first();
 
-                $finalPayment = $req->payments()
-                    ->where('is_payment_completed', 1)
-                    ->first();
+                    if ($finalPayment) {
+                        $statusTimeline[] = [
+                            'stage' => 'Payment Completed',
+                            'status' => 'payment completed',
+                            'actor_name' => 'System',
+                            'date' => \Carbon\Carbon::parse($finalPayment->payment_date)->format('Y-m-d'),
+                        ];
+                    }
 
-                if ($finalPayment) {
-                    $statusTimeline[] = [
-                        'stage' => 'Payment Completed',
-                        'status' => 'payment completed',
-                        'actor_name' => 'System',
-                        'date' => \Carbon\Carbon::parse($finalPayment->payment_date)->format('Y-m-d'),
-                    ];
-                }
+                    /*
+                    |--------------------------------------------------------------------------
+                    | 8️⃣ Supplier Rated
+                    |--------------------------------------------------------------------------
+                    */
+                    if ($req->supplierRating) {
+                        $statusTimeline[] = [
+                            'stage' => 'Supplier Rated',
+                            'status' => 'supplier rated',
+                            'actor_name' => $req->supplierRating->user?->name ?? 'Requester',
+                            'date' => $req->supplierRating->created_at?->format('Y-m-d'),
+                        ];
+                    }
 
-                /*
-                |--------------------------------------------------------------------------
-                | 7️⃣ Supplier Rated
-                |--------------------------------------------------------------------------
-                */
-                if ($req->supplierRating) {
-                    $statusTimeline[] = [
-                        'stage' => 'Supplier Rated',
-                        'status' => 'supplier rated',
-                        'actor_name' => $req->supplierRating->user?->name ?? 'Requester',
-                        'date' => $req->supplierRating->created_at?->format('Y-m-d'),
-                    ];
-                }
-
-                /*
-                |--------------------------------------------------------------------------
-                | 8️⃣ Closed
-                |--------------------------------------------------------------------------
-                */
-                if ($req->status === ModelsRequest::CLOSED) {
-                    $statusTimeline[] = [
-                        'stage' => 'Closed',
-                        'status' => 'closed',
-                        'actor_name' => 'System',
-                        'date' => $req->updated_at?->format('Y-m-d'),
-                    ];
+                    /*
+                    |--------------------------------------------------------------------------
+                    | 9️⃣ Closed
+                    |--------------------------------------------------------------------------
+                    */
+                    if ($req->status === ModelsRequest::CLOSED) {
+                        $statusTimeline[] = [
+                            'stage' => 'Closed',
+                            'status' => 'closed',
+                            'actor_name' => 'System',
+                            'date' => $req->updated_at?->format('Y-m-d'),
+                        ];
+                    }
                 }
 
                 $finalStatus = $req->getFinalStatus();
 
                 /* ======================================================
-                 * 8. Final response (NOTHING REMOVED)
+                 * Department and Budget Code Logic
                  * ====================================================== */
 
                 $isBehalf = $req->behalf_of === 1;
@@ -1802,10 +1806,11 @@ class CreateRequestController extends Controller
 
                 // Fetch full budget code details
                 $budget = $budgetCodeId
-    ? BudgetCode::select('id', 'budget_code', 'budget_limit', 'description', 'status')
-        ->where('id', $budgetCodeId)
-        ->first()
-    : null;
+                    ? BudgetCode::select('id', 'budget_code', 'budget_limit', 'description', 'status')
+                        ->where('id', $budgetCodeId)
+                        ->first()
+                    : null;
+
                 // Supplier
                 $supplier = $req->supplier;
 
@@ -1857,24 +1862,11 @@ class CreateRequestController extends Controller
                         'budget_code' => $budget?->budget_code ?? $budget?->budget_limit,
                         'type' => $isBehalf ? 'behalf' : 'self',
                     ],
-
-                    // 'department' => [
-                    //     'id' => $req->department,
-                    //     'name' => $req->departmentData?->name,
-                    // ],
                     'supplier' => [
                         'id' => $req->supplier_id,
                         'name' => $req->supplierData?->name,
                     ],
-
                     'expected_date' => $expectedDate,
-
-                    // 'supplier' => $supplier ? [
-                    //     'id' => $supplier->id,
-                    //     'name' => $supplier->name,
-                    //     'email' => $supplier->email ?? null,
-                    //     'phone' => $supplier->phone ?? null,
-                    // ] : null,
                     'workflow_history' => $workflowTimeline,
                     'status_timeline' => $statusTimeline,
 
@@ -1886,12 +1878,6 @@ class CreateRequestController extends Controller
 
                     'po_amount' => $req->poDetails?->po_amount ?? 0,
                     'total_paid' => $req->payments()->sum('payment_amount') ?? 0,
-
-                    // 'status_flags' => [
-                    //     'is_po_created' => $req->poDetails()->exists() ? 1 : 0,
-                    //     'is_delivery_completed' => $req->deliveries()->exists() ? 1 : 0,
-                    //     'is_payment_completed' => $req->payments()->exists() ? 1 : 0,
-                    // ],
 
                     'status_flags' => [
                         'is_po_created' => $req->poDetails()->exists() ? 1 : 0,
@@ -1910,8 +1896,8 @@ class CreateRequestController extends Controller
                         'date' => $req->poDetails->po_date,
                         'amount' => $req->poDetails->po_amount,
                         'file' => $req->poDetails->po_documents
-                        ? asset('storage/request_documents/'.$req->poDetails->po_documents)
-                        : null,
+                            ? asset('storage/request_documents/'.$req->poDetails->po_documents)
+                            : null,
                     ] : null,
 
                     'delivery_details' => $req->deliveries->map(function ($delivery) {
@@ -1932,13 +1918,11 @@ class CreateRequestController extends Controller
                             'date' => $payment->payment_date,
                             'amount' => $payment->payment_amount,
                             'is_payment_completed' => $payment->is_payment_completed,
-
                             'file' => $payment->payment_documents
                                 ? asset('storage/request_documents/'.$payment->payment_documents)
                                 : null,
                         ];
                     }),
-
                 ];
             });
 

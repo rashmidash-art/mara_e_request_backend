@@ -235,28 +235,36 @@ class DeprtmentController extends Controller
             $entity = Entiti::findOrFail($entityId);
 
             // Budget validations
-            $requestedBudget = $request->budget ?? $department->budget;
+            // Budget validations - ONLY run if budget is being updated
+if ($request->has('budget')) {
+    $requestedBudget = $request->budget;
 
-            $currentDepartmentBudget = Department::where('entiti_id', $entityId)
-                ->where('id', '!=', $department->id)
-                ->sum('budget');
+    // Get sum of all departments EXCEPT the current one AND EXCEPT the 'ALL' department
+    $currentDepartmentBudget = Department::where('entiti_id', $entityId)
+        ->where('id', '!=', $department->id)
+        ->where('department_code', '!=', 'ALL')  // Add this line to exclude ALL department
+        ->sum('budget');
 
-            if ($requestedBudget > $entity->budget) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Department budget cannot exceed entity budget of '.$entity->budget,
-                ], 400);
-            }
+    if ($requestedBudget > $entity->budget) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Department budget cannot exceed entity budget of '.$entity->budget,
+        ], 400);
+    }
 
-            if (($currentDepartmentBudget + $requestedBudget) > $entity->budget) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Total department budgets ('
-                        .($currentDepartmentBudget + $requestedBudget)
-                        .') cannot exceed entity budget of '
-                        .$entity->budget,
-                ], 400);
-            }
+    if (($currentDepartmentBudget + $requestedBudget) > $entity->budget) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Total department budgets ('
+                .($currentDepartmentBudget + $requestedBudget)
+                .') cannot exceed entity budget of '
+                .$entity->budget,
+        ], 400);
+    }
+} else {
+    // If budget not being updated, keep the existing budget
+    $requestedBudget = $department->budget;
+}
 
             // Regenerate BC-Dimension only if department_code changed
             $newBcDimension = $department->bc_dimention_value;
