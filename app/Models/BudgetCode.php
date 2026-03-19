@@ -10,7 +10,7 @@ class BudgetCode extends Model
 {
     use HasApiTokens ,HasFactory;
 
-    protected $fillable = ['entity_id', 'department_id', 'budget_code', 'budget_limit', 'description', 'status'];
+    protected $fillable = ['title','entity_id', 'department_id', 'budget_code', 'budget_limit', 'description', 'status'];
 
     public function entity()
     {

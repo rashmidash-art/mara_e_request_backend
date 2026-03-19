@@ -76,6 +76,7 @@ class BudgetCodeController extends Controller
         $request->validate([
             'entity_id' => 'required|exists:entitis,id',
             'department_id' => 'required|exists:departments,id',
+            'title'=>'nullable|string',
             'budget_limit' => 'required|numeric|min:1',
             'description' => 'nullable|string',
             'status' => 'required|in:0,1',
@@ -137,6 +138,7 @@ class BudgetCodeController extends Controller
                 'budget_code' => "{$entityCode}-{$deptCode}-{$sequence}",
                 'budget_limit' => $request->budget_limit,
                 'description' => $request->description,
+                'title'=>$request->title,
                 'status' => $request->status,
             ]);
 
@@ -221,6 +223,7 @@ class BudgetCodeController extends Controller
             'department_id' => 'required|exists:departments,id',
             'budget_limit' => 'required|numeric|min:1',
             'description' => 'nullable|string',
+            'title' => 'nullable|string',
             'status' => 'required|in:0,1',
         ]);
 
@@ -263,6 +266,7 @@ class BudgetCodeController extends Controller
                 'department_id' => $department->id,
                 'budget_limit' => $request->budget_limit,
                 'description' => $request->description,
+                'title'=>$request->title,
                 'status' => $request->status,
             ]);
 
@@ -308,5 +312,5 @@ class BudgetCodeController extends Controller
     }
 
 
-   
+
 }

@@ -13,6 +13,7 @@ class Request extends Model
 
     protected $fillable = [
         'request_id',
+        'title',
         'entiti',
         'user',
         'request_type',

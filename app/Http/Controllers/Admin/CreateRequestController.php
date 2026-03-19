@@ -45,7 +45,7 @@ class CreateRequestController extends Controller
                 'requestTypeData:id,name',
                 'departmentData:id,name',
                 'supplierData:id,name',
-                'budgetCode:id,budget_code',
+                'budgetCode:id,budget_code,title',
                 'documents:id,request_id,document_id,document',
                 'currentWorkflowRole' => function ($q) {
                     $q->select('id', 'request_id', 'workflow_role_id', 'assigned_user_id', 'status', 'workflow_step_id');
@@ -195,6 +195,7 @@ class CreateRequestController extends Controller
                 return [
                     'id' => $req->id,
                     'request_id' => $req->request_id,
+                    'title'=>$req->title,
                     'amount' => $req->amount,
                     'priority' => $req->priority,
                     'description' => $req->description,
@@ -219,7 +220,7 @@ class CreateRequestController extends Controller
                         'name' => $department?->name,
                     ],
 
-                    'budget_code' => ['id' => $req->budget_code, 'name' => $req->budgetCode?->budget_code],
+                    'budget_code' => ['id' => $req->budget_code, 'name' => $req->budgetCode?->budget_code, 'title' => $req->budgetCode?->title],
                     'requested_by' => ['id' => $req->user,        'name' => $req->userData?->name],
                     'request_type' => ['id' => $req->request_type, 'name' => $req->requestTypeData?->name],
                     'supplier' => ['id' => $req->supplier_id, 'name' => $req->supplierData?->name],
@@ -776,6 +777,7 @@ class CreateRequestController extends Controller
             // ------------------------- VALIDATION ------------------------- //
             $validated = $request->validate([
                 'entiti' => 'nullable|integer',
+                'title'=>'nullable|string',
                 'user' => 'nullable|integer',
                 'request_type' => 'nullable|integer',
                 'category' => 'nullable|integer',
@@ -826,6 +828,7 @@ class CreateRequestController extends Controller
                 // Create request
                 $req = ModelsRequest::create([
                     'request_id' => $request_no,
+                    'title'=>$request->title,
                     'entiti' => $request->entiti,
                     'user' => $request->user,
                     'request_type' => $request->request_type,
@@ -1030,6 +1033,7 @@ class CreateRequestController extends Controller
             // -------------------------- UPDATE REQUEST MASTER -------------------------- //
             $validated = $request->validate([
                 'entiti' => 'nullable|integer',
+                'title'=> 'nullable|string',
                 'user' => 'nullable|integer',
                 'request_type' => 'nullable|integer',
                 'category' => 'nullable|integer',
@@ -1069,7 +1073,7 @@ class CreateRequestController extends Controller
             }
 
             $req->update($request->only([
-                'entiti', 'user', 'request_type', 'category', 'department',
+                'title','entiti', 'user', 'request_type', 'category', 'department',
                 'budget_code', 'amount', 'description', 'supplier_id', 'expected_date',
                 'priority', 'behalf_of', 'behalf_of_department', 'behalf_of_buget_code',
                 'business_justification', 'status',
@@ -1817,7 +1821,7 @@ class CreateRequestController extends Controller
 
                 // Fetch full budget code details
                 $budget = $budgetCodeId
-                    ? BudgetCode::select('id', 'budget_code', 'budget_limit', 'description', 'status')
+                    ? BudgetCode::select('id','title','budget_code', 'budget_limit', 'description', 'status')
                         ->where('id', $budgetCodeId)
                         ->first()
                     : null;
@@ -1838,6 +1842,7 @@ class CreateRequestController extends Controller
                 return [
                     'id' => $req->id,
                     'request_id' => $req->request_id,
+                    'title'=>$req->title,
                     'amount' => (float) $req->amount,
                     'priority' => $req->priority,
                     'description' => $req->description,
@@ -1871,6 +1876,7 @@ class CreateRequestController extends Controller
                         'id' => $department?->id,
                         'name' => $department?->name,
                         'budget_code' => $budget?->budget_code ?? $budget?->budget_limit,
+                        'title'=>$budget ?-> title,
                         'type' => $isBehalf ? 'behalf' : 'self',
                     ],
                     'supplier' => [
