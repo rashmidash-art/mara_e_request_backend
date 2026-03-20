@@ -149,7 +149,7 @@
 
     <h4 class="heading">INTERNAL MEMO</h4>
     <hr>
-
+    <h3>Subject : <u>{{ $request->title }}</u></h3>
     <p><b>Request ID:</b> {{ $request->request_id }}</p>
     <p><b>Requested By:</b> {{ $request->userData?->name ?? '-' }}</p>
     <p><b>Date:</b> {{ $request->created_at?->format('Y-m-d') }}</p>
@@ -159,13 +159,13 @@
     <h5>Request Details</h5>
     <p><b>Amount:</b> RM {{ number_format($request->amount, 2) }}</p>
     <p><b>Department:</b> {{ $request->departmentData?->name ?? '-' }}</p>
-    <p><b>Supplier Name:</b> {{ $request->supplierData?->name ?? '-' }}</p>
+    <p><b>Vendor Name:</b> {{ $request->supplierData?->name ?? '-' }}</p>
     <p><b>Priority:</b> {{ $request->priority ?? '-' }}</p>
     <p><b>Description:</b><br> {!! $request->description === strip_tags($request->description)
         ? nl2br(e($request->description))
         : $request->description !!}</p>
 
-    <p><b>Business Justification:</b><br> {!! $request->business_justification === strip_tags($request->business_justification)
+    <p><b>Approval Sought:</b><br> {!! $request->business_justification === strip_tags($request->business_justification)
         ? nl2br(e($request->business_justification))
         : $request->business_justification !!}</p>
     {{-- <p><b>B    usiness Justification:</b><br>{!! nl2br(e($request->business_justification)) !!}</p> --}}
@@ -192,7 +192,7 @@
     <p>We seek requisition approval from the <b>Department Head</b> of
         <b>{{ $request->departmentData?->name ?? 'N/A' }}</b> for a
         <b>{{ $request->requestTypeData?->name ?? 'Request Type' }}</b> request type of an amount <b>RM
-            {{ number_format($request->amount, 2) }}</b>, linked with Supplier
+            {{ number_format($request->amount, 2) }}</b>, linked with Vendor
         <b>{{ $request->supplierData?->name ?? '-' }}</b>.
     </p>
 
@@ -208,7 +208,7 @@
                 <td>
                     <strong>{{ $request->userData?->name }}</strong><br>
                     {{ $request->departmentData?->name ?? 'N/A' }}<br>
-                    {{ $request->created_at?->format('d F Y') }}
+                    {{ $request->created_at?->format('d F Y h:i A') }}
                 </td>
                 {{-- <td></td> --}}
             </tr>
@@ -223,7 +223,7 @@
 
     @foreach ($workflowTimeline as $index => $step)
         <div class="step-title">
-             {{ $index + 2 }}. {{ $step['step'] ?? $step['stage'] ?? 'Approval Step' }}
+            {{ $index + 2 }}. {{ $step['step'] ?? ($step['stage'] ?? 'Approval Step') }}
         </div>
         <table>
             <thead>
@@ -254,7 +254,7 @@
                     <td>
                         <strong>{{ $step['role'] ?? 'N/A' }} Reviewed by</strong><br>
                         {{ $step['assigned_user'] ?? '-' }}<br>
-                        {{ $step['date'] ?? '-' }}
+                        {{ $step['date'] ? \Carbon\Carbon::parse($step['date'])->format('d M Y h:i A') : '-' }}
                     </td>
 
                     <td colspan="2"></td> {{-- Approved mark column --}}
@@ -356,7 +356,7 @@
                 <li>
                     {{ $item['label'] }}
                     —
-                    {{ $item['date'] ?? '-' }}
+                    {{ $item['date'] ? \Carbon\Carbon::parse($item['date'])->format('d M Y h:i A') : '-' }}
                 </li>
             @endforeach
         </ul>
