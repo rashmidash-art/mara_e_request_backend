@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Entiti;
 use App\Models\WorkFlow;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
@@ -13,17 +14,28 @@ class WorkFlowController extends Controller
     /**
      * Display all workflows.
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
-            // $workflows = WorkFlow::all();
-            $workflows = WorkFlow::orderBy('id', 'desc')->get();
+            $user = $request->user();
+
+            $query = WorkFlow::orderBy('id', 'desc');
+
+            //  If ENTITY → restrict data
+            if ($user instanceof Entiti) {
+                $query->where('entity_id', $user->id);
+            }
+
+            //  Super Admin → no restriction
+
+            $workflows = $query->get();
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Workflows retrieved successfully',
                 'data' => $workflows,
             ], 200);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',

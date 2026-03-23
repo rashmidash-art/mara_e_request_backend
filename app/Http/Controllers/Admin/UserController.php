@@ -54,27 +54,45 @@ class UserController extends Controller
     public function index(Request $request)
     {
         try {
-            $users = $request->user(); // logged-in user
+            $authUser = $request->user();
 
             $userList = [];
+            $entityId = null;
 
-            if ($users instanceof User && $users->user_type == 0) {
-                // Admin: can see all users
-                $userList = User::with('roles')->where('user_type', 1)->get();
-            } else {
-                // Normal user: only users from their entity
+            // ✅ SUPER ADMIN
+            if ($authUser instanceof User && $authUser->user_type == 0) {
                 $userList = User::with('roles')
-                    ->where('entiti_id', $users->entiti_id)
                     ->where('user_type', 1)
                     ->get();
             }
 
-            // Fetch the entity budget for logged-in user
+            // ✅ NORMAL USER
+            elseif ($authUser instanceof User) {
+                $entityId = $authUser->entiti_id;
+
+                $userList = User::with('roles')
+                    ->where('entiti_id', $entityId)
+                    ->where('user_type', 1)
+                    ->get();
+            }
+
+            // ✅ ENTITY LOGIN
+            elseif ($authUser instanceof Entiti) {
+                $entityId = $authUser->id;
+
+                $userList = User::with('roles')
+                    ->where('entiti_id', $entityId)
+                    ->where('user_type', 1)
+                    ->get();
+            }
+
+            // ✅ Get entity budget
             $entityBudget = 0;
-            if ($users->entiti_id) {
-                $entity = Entiti::find($users->entiti_id);
+
+            if ($entityId) {
+                $entity = Entiti::find($entityId);
                 if ($entity) {
-                    $entityBudget = $entity->budget; // assuming `budget` field exists
+                    $entityBudget = $entity->budget;
                 }
             }
 
@@ -85,7 +103,7 @@ class UserController extends Controller
                 'entityBudget' => $entityBudget,
             ], 200);
 
-        } catch (QueryException $e) {
+        } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to retrieve users',
@@ -93,7 +111,6 @@ class UserController extends Controller
             ], 500);
         }
     }
-
     // Get logged-in user's entity budget
 
     /**
@@ -208,20 +225,7 @@ class UserController extends Controller
         try {
             $user = User::findOrFail($id);
             $authUser = $request->user();
-
-            /**
-             * ==============================
-             * SELF PROFILE UPDATE (SAFE PATH)
-             * ==============================
-             * Applies when user updates own profile
-             * Works for:
-             * - User
-             * - Entity Admin
-             * - Master Admin
-             */
             if ($authUser instanceof User && $authUser->id === $user->id) {
-
-                // --- Validation for self update ---
                 $request->validate([
                     'name' => 'sometimes|required|string|max:255',
                     'password' => 'nullable|string|min:6',
@@ -229,15 +233,10 @@ class UserController extends Controller
                 ]);
 
                 $data = [];
-
-                // Update name
                 if ($request->filled('name')) {
                     $data['name'] = $request->name;
                 }
-
-                // Update password
                 if ($request->filled('password')) {
-
                     if (! Hash::check($request->current_password, $user->password)) {
                         return response()->json([
                             'status' => 'error',
@@ -247,11 +246,8 @@ class UserController extends Controller
                             ],
                         ], 422);
                     }
-
                     $data['password'] = Hash::make($request->password);
                 }
-
-                // Nothing to update
                 if (empty($data)) {
                     return response()->json([
                         'status' => 'success',
@@ -259,7 +255,6 @@ class UserController extends Controller
                         'data' => $user,
                     ], 200);
                 }
-
                 $user->update($data);
 
                 return response()->json([
@@ -268,14 +263,6 @@ class UserController extends Controller
                     'data' => $user,
                 ], 200);
             }
-
-            /**
-             * ==============================
-             * ADMIN / ENTITY USER MANAGEMENT
-             * ==============================
-             */
-
-            // Validation for admin edit
             $request->validate([
                 'name' => 'sometimes|required|string|max:255',
                 'designation' => 'sometimes|required|string|max:255',
@@ -293,13 +280,9 @@ class UserController extends Controller
                 'status' => ['sometimes', 'required', Rule::in(['Active', 'Inactive', 'Away'])],
                 'roles' => 'sometimes|array',
             ]);
-
             $entiti_id = $request->entiti_id ?? $user->entiti_id;
             $department_id = $request->department_id ?? 0;
-
             $entity = Entiti::findOrFail($entiti_id);
-
-            // LOA validation
             if ($department_id == 0) {
                 if ($request->has('loa') && $request->loa > $entity->budget) {
                     return response()->json([
@@ -323,7 +306,6 @@ class UserController extends Controller
                     ], 400);
                 }
             }
-
             $data = $request->only([
                 'name',
                 'designation',
@@ -334,13 +316,9 @@ class UserController extends Controller
                 'loa',
                 'status',
             ]);
-
-            // Admin password reset (no current password required)
             if ($request->filled('password')) {
                 $data['password'] = Hash::make($request->password);
             }
-
-            // Signature upload
             if ($request->hasFile('signature')) {
                 if ($user->signature) {
                     Storage::disk('public')->delete($user->signature);

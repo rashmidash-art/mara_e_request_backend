@@ -14,17 +14,46 @@ class BudgetCodeController extends Controller
     /**
      * Display all budget codes
      */
-    public function index()
+    // public function index()
+    // {
+    //     try {
+    //         $budgetCodes = BudgetCode::with(['entity', 'department'])
+    //             ->orderBy('id', 'desc')
+    //             ->get();
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'data' => $budgetCodes,
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => 'Failed to fetch budget codes',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
+    public function index(Request $request)
     {
         try {
-            $budgetCodes = BudgetCode::with(['entity', 'department'])
-                ->orderBy('id', 'desc')
-                ->get();
+            $user = $request->user();
+
+            $query = BudgetCode::with(['entity', 'department'])
+                ->orderBy('id', 'desc');
+
+            if ($user instanceof Entiti) {
+                $query->where('entity_id', $user->id);
+
+            }
+
+            $budgetCodes = $query->get();
 
             return response()->json([
                 'status' => 'success',
                 'data' => $budgetCodes,
             ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
@@ -76,7 +105,7 @@ class BudgetCodeController extends Controller
         $request->validate([
             'entity_id' => 'required|exists:entitis,id',
             'department_id' => 'required|exists:departments,id',
-            'title'=>'nullable|string',
+            'title' => 'nullable|string',
             'budget_limit' => 'required|numeric|min:1',
             'description' => 'nullable|string',
             'status' => 'required|in:0,1',
@@ -138,7 +167,7 @@ class BudgetCodeController extends Controller
                 'budget_code' => "{$entityCode}-{$deptCode}-{$sequence}",
                 'budget_limit' => $request->budget_limit,
                 'description' => $request->description,
-                'title'=>$request->title,
+                'title' => $request->title,
                 'status' => $request->status,
             ]);
 
@@ -266,7 +295,7 @@ class BudgetCodeController extends Controller
                 'department_id' => $department->id,
                 'budget_limit' => $request->budget_limit,
                 'description' => $request->description,
-                'title'=>$request->title,
+                'title' => $request->title,
                 'status' => $request->status,
             ]);
 
@@ -310,7 +339,4 @@ class BudgetCodeController extends Controller
             'message' => 'Budget code deleted successfully',
         ]);
     }
-
-
-
 }

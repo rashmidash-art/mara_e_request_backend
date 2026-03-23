@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Category;
 use App\Models\Department;
 use App\Models\Document;
 use App\Models\Entiti;
@@ -160,7 +159,6 @@ class EntitiesController extends Controller
                 'sometimes',
                 'required',
                 'email',
-                // 'email:rfc,dns',
                 Rule::unique('entitis', 'email')->ignore($entity->id),
             ],
 
@@ -176,9 +174,20 @@ class EntitiesController extends Controller
             ],
 
             'description' => 'nullable|string',
-
             'status' => ['required', Rule::in([0, 1])],
         ]);
+        // if ($request->filled('password')) {
+
+        //     if (! Hash::check($request->current_password, $entity->password)) {
+        //         return response()->json([
+        //             'status' => 'error',
+        //             'message' => 'Current password is incorrect',
+        //             'errors' => [
+        //                 'current_password' => ['Current password is incorrect'],
+        //             ],
+        //         ], 422);
+        //     }
+        // }
 
         $entity->update([
             'name' => $validated['name'] ?? $entity->name,
@@ -289,17 +298,17 @@ class EntitiesController extends Controller
     }
 
     public function getCategoryByEntity($entityId)
-{
-    $categories = DB::table('entity_requests')
-        ->join('categories', 'categories.id', '=', 'entity_requests.categore_id')
-        ->where('entity_requests.entity_id', $entityId)
-        ->select('categories.id', 'categories.name')
-        ->distinct()
-        ->get();
+    {
+        $categories = DB::table('entity_requests')
+            ->join('categories', 'categories.id', '=', 'entity_requests.categore_id')
+            ->where('entity_requests.entity_id', $entityId)
+            ->select('categories.id', 'categories.name')
+            ->distinct()
+            ->get();
 
-    return response()->json([
-        'status' => 'success',
-        'data' => $categories
-    ]);
-}
+        return response()->json([
+            'status' => 'success',
+            'data' => $categories,
+        ]);
+    }
 }

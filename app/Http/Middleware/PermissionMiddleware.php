@@ -40,38 +40,91 @@ class PermissionMiddleware
         // ======================================
         //  2. ENTITY USER (entiti-api)
         // ======================================
+        // if ($user instanceof Entiti) {
+
+        //     $permission = $this->resolvePermission($request);
+
+        //     Log::info("🟦 ENTITY Permission Check: $permission");
+
+        //     if ($request->route()->getName() === 'entity.itself') {
+        //         Log::info(' ENTITY allowed own details');
+
+        //         return $next($request);
+        //     }
+
+        //     if ($permission === 'entities.view') {
+        //         Log::info(' ENTITY allowed entity list');
+
+        //         return $next($request);
+        //     }
+
+        //     if (str_starts_with($permission, 'entities.')) {
+        //         Log::warning(" ENTITY blocked: $permission");
+
+        //         return response()->json([
+        //             'status' => 'error',
+        //             'message' => 'Forbidden – You cannot access other entity details',
+        //         ], 403);
+        //     }
+
+        //     Log::info(' ENTITY allowed general access');
+
+        //     return $next($request);
+        // }
+
         if ($user instanceof Entiti) {
 
             $permission = $this->resolvePermission($request);
 
-            Log::info("🟦 ENTITY Permission Check: $permission");
+            Log::info(" ENTITY Permission Check: $permission");
 
-            // allow only its own entity view
+            //  Allow viewing own entity
             if ($request->route()->getName() === 'entity.itself') {
-                Log::info(' ENTITY allowed own details');
-
                 return $next($request);
             }
 
-            // allow only "entities.view"
+            //  Allow listing entities
             if ($permission === 'entities.view') {
-                Log::info(' ENTITY allowed entity list');
-
                 return $next($request);
             }
 
-            // block other entity actions
-            if (str_starts_with($permission, 'entities.')) {
-                Log::warning(" ENTITY blocked: $permission");
+            //   ALLOW updating own entity
+            if ($permission === 'entities.update') {
 
+                $routeId = $request->route('entity') ?? $request->route('id');
+
+                if ((int) $routeId === (int) $user->id) {
+                    Log::info(' ENTITY allowed to update own profile');
+
+                    return $next($request);
+                }
+
+                Log::warning(' ENTITY tried to update another entity');
+                Log::info('ENTITY DEBUG', [
+                    'route_param_entity' => $request->route('entity'),
+                    'route_param_id' => $request->route('id'),
+                    'final_route_id' => $routeId,
+                    'auth_user_id' => $user->id,
+                ]);
+                Log::info('UPDATE DEBUG', [
+                    'auth_user_id' => $user->id,
+                    'route_entity' => $request->route('entity'),
+                    'route_id' => $request->route('id'),
+                ]);
+
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Forbidden – You cannot update other entities',
+                ], 403);
+            }
+
+            //  Block all other entity actions
+            if (str_starts_with($permission, 'entities.')) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Forbidden – You cannot access other entity details',
                 ], 403);
             }
-
-            // allow all other modules
-            Log::info(' ENTITY allowed general access');
 
             return $next($request);
         }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Department;
+use App\Models\Entiti;
 use App\Models\Request as ModelsRequest;
 use App\Models\Supplier;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -17,73 +18,84 @@ class SupplierController extends Controller
     /**
      * Display all suppliers.
      */
-    public function index()
-    {
-        try {
-            // Fetch all suppliers
-            $suppliers = Supplier::all();
+public function index(Request $request)
+{
+    try {
+        $user = $request->user();
 
-            // Transform suppliers
-            $suppliers = $suppliers->map(function ($supplier) {
-                // Categories & departments
-                $categoryIds = $supplier->categories ? explode(',', $supplier->categories) : [];
-                $categories = Category::whereIn('id', $categoryIds)->get(['id', 'name']);
-                $departmentIds = $supplier->departments ? explode(',', $supplier->departments) : [];
-                $departments = Department::whereIn('id', $departmentIds)->get(['id', 'name']);
+        // Base query
+        $query = Supplier::query();
 
-                $supplier->categories_detail = $categories;
-                $supplier->departments_detail = $departments;
-
-                // Fetch requests for this supplier with ratings
-                $requests = ModelsRequest::with('requestTypeData:id,name', 'categoryData:id,name', 'supplierRating')
-                    ->where('supplier_id', $supplier->id)
-                    ->get()
-                    ->map(function ($r) {
-                        return [
-                            'request_id' => $r->request_id,
-                            'title' => $r->requestTypeData->name ?? '—',
-                            'category' => $r->categoryData->name ?? '—',
-                            'amount' => $r->amount,
-                            'status' => $r->status,
-                            'user_rating' => $r->supplierRating->rating ?? null,
-                            'comment' => $r->supplierRating->comment ?? null,
-                        ];
-                    });
-
-                $supplier->requests = $requests;
-
-                // Calculate average rating for this supplier
-                $supplier->avg_rating = $requests->avg('user_rating');
-
-                // Total requests
-                $supplier->total_requests = $requests->count();
-
-                // Completed ratings (requests that have a supplier rating)
-                $supplier->completed_ratings = $requests->filter(fn ($r) => $r['user_rating'] !== null)->count();
-
-                // Average rating across all rated requests
-                $supplier->avg_rating = $requests->filter(fn ($r) => $r['user_rating'] !== null)
-                    ->avg('user_rating')
-                                                ? round($requests->filter(fn ($r) => $r['user_rating'] !== null)->avg('user_rating'), 1)
-                                                : null;
-
-                return $supplier;
-            });
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Suppliers retrieved successfully',
-                'data' => $suppliers,
-            ], 200);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to retrieve suppliers',
-                'error' => $e->getMessage(),
-            ], 500);
+        // If logged in user is an Entity → filter suppliers
+        if ($user instanceof Entiti) {
+            $query->where('entiti_id', $user->id);
         }
+
+        // If super admin → no filter (gets all)
+
+        $suppliers = $query->get()->map(function ($supplier) {
+
+            // Categories & departments
+            $categoryIds = $supplier->categories ? explode(',', $supplier->categories) : [];
+            $categories = Category::whereIn('id', $categoryIds)->get(['id', 'name']);
+
+            $departmentIds = $supplier->departments ? explode(',', $supplier->departments) : [];
+            $departments = Department::whereIn('id', $departmentIds)->get(['id', 'name']);
+
+            $supplier->categories_detail = $categories;
+            $supplier->departments_detail = $departments;
+
+            // Requests with ratings
+            $requests = ModelsRequest::with(
+                    'requestTypeData:id,name',
+                    'categoryData:id,name',
+                    'supplierRating'
+                )
+                ->where('supplier_id', $supplier->id)
+                ->get()
+                ->map(function ($r) {
+                    return [
+                        'request_id' => $r->request_id,
+                        'title' => $r->requestTypeData->name ?? '—',
+                        'category' => $r->categoryData->name ?? '—',
+                        'amount' => $r->amount,
+                        'status' => $r->status,
+                        'user_rating' => $r->supplierRating->rating ?? null,
+                        'comment' => $r->supplierRating->comment ?? null,
+                    ];
+                });
+
+            $supplier->requests = $requests;
+
+            // Total requests
+            $supplier->total_requests = $requests->count();
+
+            // Completed ratings
+            $ratedRequests = $requests->filter(fn ($r) => $r['user_rating'] !== null);
+            $supplier->completed_ratings = $ratedRequests->count();
+
+            // Average rating
+            $supplier->avg_rating = $ratedRequests->count()
+                ? round($ratedRequests->avg('user_rating'), 1)
+                : null;
+
+            return $supplier;
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Suppliers retrieved successfully',
+            'data' => $suppliers,
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Failed to retrieve suppliers',
+            'error' => $e->getMessage(),
+        ], 500);
     }
+}
 
     /**
      * Store a new supplier.
