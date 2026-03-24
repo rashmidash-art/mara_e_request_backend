@@ -168,7 +168,6 @@
     <p><b>Approval Sought:</b><br> {!! $request->business_justification === strip_tags($request->business_justification)
         ? nl2br(e($request->business_justification))
         : $request->business_justification !!}</p>
-    {{-- <p><b>B    usiness Justification:</b><br>{!! nl2br(e($request->business_justification)) !!}</p> --}}
 
     <hr>
     <h5>Documents Submitted:</h5>
@@ -200,7 +199,6 @@
         <thead>
             <tr>
                 <th>Prepared by</th>
-                {{-- <th>Remarks</th> --}}
             </tr>
         </thead>
         <tbody>
@@ -210,16 +208,9 @@
                     {{ $request->departmentData?->name ?? 'N/A' }}<br>
                     {{ $request->created_at?->format('d F Y h:i A') }}
                 </td>
-                {{-- <td></td> --}}
             </tr>
         </tbody>
     </table>
-    {{-- @php
-        $stepTitles = [
-            2 => 'Department Review',
-            3 => 'Blockchain Request Review',
-        ];
-    @endphp --}}
 
     @foreach ($workflowTimeline as $index => $step)
         <div class="step-title">
@@ -254,7 +245,9 @@
                     <td>
                         <strong>{{ $step['role'] ?? 'N/A' }} Reviewed by</strong><br>
                         {{ $step['assigned_user'] ?? '-' }}<br>
-                        {{ $step['date'] ? \Carbon\Carbon::parse($step['date'])->format('d M Y h:i A') : '-' }}
+                        {{ !empty($step['date']) && $step['date'] !== '-'
+                            ? \Carbon\Carbon::parse($step['date'])->format('d M Y h:i A')
+                            : '-' }}
                     </td>
 
                     <td colspan="2"></td> {{-- Approved mark column --}}
@@ -271,83 +264,6 @@
         </table>
     @endforeach
 
-    {{-- @if ($request->poDetails)
-        <h4 class="section-title">PO Details</h4>
-
-        <table class="custom-table">
-            <thead>
-                <tr>
-                    <th>PO Number</th>
-                    <th>PO Date</th>
-                    <th class="text-right">PO Amount (RM)</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>{{ $request->poDetails->po_number }}</td>
-                    <td>{{ $request->poDetails->po_date }}</td>
-                    <td class="text-right">
-                        {{ number_format($request->poDetails->po_amount, 2) }}
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    @endif
-
-    @if ($request->deliveries->count())
-        <h4 class="section-title"> Delivery Details</h4>
-
-        <table class="custom-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Delivery Number</th>
-                    <th>Delivery Date</th>
-                    <th class="text-right">Quantity</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach ($request->deliveries as $index => $delivery)
-                    <tr>
-                        <td>{{ $index + 1 }}</td>
-                        <td>{{ $delivery->delivery_number }}</td>
-                        <td>{{ $delivery->delivery_date }}</td>
-                        <td class="text-right">
-                            {{ number_format($delivery->delivery_quantity) }}
-                        </td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-    @endif
-
-
-    @if ($request->payments->count())
-        <h4 class="section-title">Payment Details</h4>
-
-        <table class="custom-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Payment Number</th>
-                    <th>Payment Date</th>
-                    <th class="text-right">Payment Amount (RM)</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach ($request->payments as $index => $payment)
-                    <tr>
-                        <td>{{ $index + 1 }}</td>
-                        <td>{{ $payment->payment_number }}</td>
-                        <td>{{ $payment->payment_date }}</td>
-                        <td class="text-right">
-                            {{ number_format($payment->payment_amount, 2) }}
-                        </td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
-    @endif --}}
 
     @if (!empty($lifecycleTimeline))
         <h5>Request Lifecycle</h5>
@@ -356,7 +272,7 @@
                 <li>
                     {{ $item['label'] }}
                     —
-                    {{ $item['date'] ? \Carbon\Carbon::parse($item['date'])->format('d M Y h:i A') : '-' }}
+                    {{ $item['date'] ? \Carbon\Carbon::parse($item['date'])->format('d M Y h:i A') : 'N/A ' }}
                 </li>
             @endforeach
         </ul>

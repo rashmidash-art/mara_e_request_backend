@@ -500,6 +500,25 @@ class CreateRequestController extends Controller
                 ]);
             }
 
+            // -------------------------- NORMAL CLOSE REQUEST -------------------------- //
+            if ($request->close_request == true) {
+                if ($req->deliveries()->exists() && $req->payments()->exists()) {
+
+                    $req->update(['status' => 'closed']);
+
+                    RequestWorkflowDetails::where('request_id', $req->request_id)
+                        ->where('status', 'pending')
+                        ->update(['status' => 'closed']);
+
+                    return response()->json([
+                        'status' => 'success',
+                        'message' => 'Request closed successfully',
+                    ]);
+                } else {
+                    throw new \Exception('Cannot close request: Complete all deliveries and payments first');
+                }
+            }
+
             // -------------------------- WITHDRAW REQUEST -------------------------- //
             if ($request->status === 'withdraw') {
                 if ($req->status !== 'submitted') {
@@ -715,10 +734,10 @@ class CreateRequestController extends Controller
             // -------------------------- DELIVERY -------------------------- //
 
             $hasAnyField =
-    $request->filled('delivery_number') ||
-    $request->filled('delivery_date') ||
-    $request->filled('delivery_quantity') ||
-    $request->hasFile('delivery_documents');
+            $request->filled('delivery_number') ||
+            $request->filled('delivery_date') ||
+            $request->filled('delivery_quantity') ||
+            $request->hasFile('delivery_documents');
 
             $existingDeliveryExists = $req->deliveries()->exists();
 
@@ -1397,7 +1416,7 @@ class CreateRequestController extends Controller
                             'status' => $actionTaken->contains('status', 'approved')
                                 ? 'approved'
                                 : 'rejected',
-                            'date' => optional($actionTaken->max('updated_at'))->format('Y-m-d'),
+                            'date' => optional($actionTaken->max('updated_at'))?->format('Y-m-d'),
                             'remark' => $actionTaken->pluck('remark')->filter()->implode(' | '),
                         ];
                     }
@@ -1407,7 +1426,7 @@ class CreateRequestController extends Controller
                         'role' => $stepGroup->first()?->role?->name ?? 'N/A',
                         'assigned_user' => 'Pending',
                         'status' => 'pending',
-                        'date' => '-',
+                        'date' => null,
                         'remark' => '',
                     ];
                 })
@@ -1417,7 +1436,7 @@ class CreateRequestController extends Controller
             $lifecycleTimeline = [];
 
             /* PO Created */
-            if ($requestData->poDetails) {
+            if (! empty($requestData->poDetails) && ! empty($requestData->poDetails->po_date)) {
                 $lifecycleTimeline[] = [
                     'label' => 'PO Created',
                     'date' => $requestData->poDetails->po_date,
@@ -1429,10 +1448,10 @@ class CreateRequestController extends Controller
                 ->where('is_delivery_completed', 1)
                 ->first();
 
-            if ($deliveryCompleted) {
+            if ($deliveryCompleted && $deliveryCompleted->created_at) {
                 $lifecycleTimeline[] = [
                     'label' => 'Delivery Completed',
-                    'date' => $deliveryCompleted->created_at?->format('Y-m-d'),
+                    'date' => $deliveryCompleted->created_at->format('Y-m-d'),
                 ];
             }
 
@@ -1441,26 +1460,26 @@ class CreateRequestController extends Controller
                 ->where('is_payment_completed', 1)
                 ->first();
 
-            if ($paymentCompleted) {
+            if ($paymentCompleted && $paymentCompleted->created_at) {
                 $lifecycleTimeline[] = [
                     'label' => 'Payment Completed',
-                    'date' => $paymentCompleted->created_at?->format('Y-m-d'),
+                    'date' => $paymentCompleted->created_at->format('Y-m-d'),
                 ];
             }
 
             /* Supplier Rated */
-            if ($requestData->supplierRating) {
+            if (! empty($requestData->supplierRating) && $requestData->supplierRating->created_at) {
                 $lifecycleTimeline[] = [
                     'label' => 'Supplier Rated',
-                    'date' => $requestData->supplierRating->created_at?->format('Y-m-d'),
+                    'date' => $requestData->supplierRating->created_at->format('Y-m-d'),
                 ];
             }
 
             /* Closed */
-            if ($requestData->status === 'closed') {
+            if ($requestData->status === 'closed' && $requestData->updated_at) {
                 $lifecycleTimeline[] = [
                     'label' => 'Closed',
-                    'date' => $requestData->updated_at?->format('Y-m-d'),
+                    'date' => $requestData->updated_at->format('Y-m-d'),
                 ];
             }
 
