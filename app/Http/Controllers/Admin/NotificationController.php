@@ -22,7 +22,8 @@ class NotificationController extends Controller
 
         $notifications = Notification::where('user_id', $user->id)
             ->where('is_read', 0)
-            ->orderBy('notify_at', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
             ->get();
 
         return response()->json([

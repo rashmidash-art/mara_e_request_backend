@@ -47,6 +47,7 @@ class RequestWorkflowDetailsController extends Controller
                 'description' => $request->description,
                 'amount' => $request->amount,
                 'type' => $request->requestTypeData->name ?? null,
+                'priority' => $request->priority ?? null,
                 'requestor' => [
                     'id' => $request->userData->id ?? null,
                     'name' => $request->userData->name ?? null,
@@ -78,7 +79,14 @@ class RequestWorkflowDetailsController extends Controller
 
         $counts = [
             'total' => $data->count(),
-            'approved' => $data->where('status', 'approved')->count(),
+            'approve' => $data->where('status', 'approve')->count(),
+            // 'approve' => $data->whereIn('status', [
+            //     'approve',
+            //     'approved',
+            //     'po_created',
+            //     'payment_completed',
+            //     'delivery_completed',
+            // ])->count(),
             'rejected' => $data->where('status', 'rejected')->count(),
             'pending' => $data->where('status', 'pending')->count(),
         ];

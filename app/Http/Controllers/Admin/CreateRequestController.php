@@ -481,6 +481,22 @@ class CreateRequestController extends Controller
 
             $oldStatus = $req->getOriginal('status');
 
+            // -------------------------- FORCE CLOSE REQUEST -------------------------- //
+            if ($request->force_close == true) {
+
+                $req->update(['status' => 'closed']);
+
+                // Close all pending workflow steps
+                RequestWorkflowDetails::where('request_id', $req->request_id)
+                    ->whereIn('status', ['pending', 'waiting'])
+                    ->update(['status' => 'closed']);
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Request force closed successfully',
+                ]);
+            }
+
             // -------------------------- RECALL TO DRAFT -------------------------- //
             if ($request->status === 'draft') {
                 if (! in_array($req->status, ['submitted', 'pending', 'in_approval'])) {
@@ -840,50 +856,6 @@ class CreateRequestController extends Controller
 
                 $req->refresh()->recalculateStatus();
             }
-
-            // if ($request->hasFile('delivery_documents')) {
-            //     if (! $req->poDetails()->exists()) {
-            //         throw new \Exception('Upload PO before delivery');
-            //     }
-
-            //     $file = $request->file('delivery_documents');
-            //     $name = 'delivery_'.$req->request_id.'_'.time().'_'.$file->getClientOriginalName();
-            //     $file->storeAs('request_documents', $name, 'public');
-
-            //     DeliveryOrerDetails::create([
-            //         'request_id' => $req->request_id,
-            //         'is_delivery_completed' => $request->is_delivery_completed == 1 ? 1 : 0,
-            //         'delivery_number' => $request->delivery_number,
-            //         'delivery_date' => $request->delivery_date,
-            //         'delivery_quantity' => $request->delivery_quantity,
-            //         'delivery_documents' => $name,
-            //         'status' => 'completed',
-            //     ]);
-
-            //     $req->refresh()->recalculateStatus();
-            // }
-
-            // if ($request->hasFile('payment_documents')) {
-            //     if (! $req->deliveries()->exists()) {
-            //         throw new \Exception('Complete delivery before payment');
-            //     }
-
-            //     $file = $request->file('payment_documents');
-            //     $name = 'payment_'.$req->request_id.'_'.time().'_'.$file->getClientOriginalName();
-            //     $file->storeAs('request_documents', $name, 'public');
-
-            //     PaymentDetails::create([
-            //         'request_id' => $req->request_id,
-            //         'is_payment_completed' => $request->is_payment_completed == 1 ? 1 : 0,
-            //         'payment_number' => $request->payment_number,
-            //         'payment_amount' => $request->payment_amount,
-            //         'payment_date' => $request->payment_date,
-            //         'payment_documents' => $name,
-            //         'status' => 'completed',
-            //     ]);
-
-            //     $req->refresh()->recalculateStatus();
-            // }
 
             // -------------------------- SUPPLIER RATING -------------------------- //
             if ($request->filled('rating')) {
