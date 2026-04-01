@@ -188,12 +188,12 @@
     <h5>Approval Process:</h5>
 
     <div class="step-title">1. Request Submission</div>
-    <p>We seek requisition approval from the <b>Department Head</b> of
+    {{-- <p>We seek requisition approval from the <b>Department Head</b> of
         <b>{{ $request->departmentData?->name ?? 'N/A' }}</b> for a
         <b>{{ $request->requestTypeData?->name ?? 'Request Type' }}</b> request type of an amount <b>RM
             {{ number_format($request->amount, 2) }}</b>, linked with Vendor
         <b>{{ $request->supplierData?->name ?? '-' }}</b>.
-    </p>
+    </p> --}}
 
     <table>
         <thead>
