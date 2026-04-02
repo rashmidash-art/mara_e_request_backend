@@ -61,6 +61,11 @@ Route::get('/entity/{id}/categories', [EntitiesController::class, 'getCategoryBy
 
 Route::middleware('auth:api,entiti-api')->group(function () {
     Route::get('budgets', [BudgetController::class, 'index']);
+    Route::get(
+            'entity/{entityId}/category/{categoryId}/supplier',
+            [SupplierController::class, 'getSupplierbyEntityandCatrhory']
+        );
+        
 });
 
 Route::middleware('auth:api,entiti-api')->group(function () {
@@ -94,10 +99,10 @@ Route::middleware('auth:api,entiti-api')->group(function () {
 
         Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
         Route::post('/requests/action', [RequestWorkflowDetailsController::class, 'takeAction']);
-        Route::get(
-            'entity/{entityId}/category/{categoryId}/supplier',
-            [SupplierController::class, 'getSupplierbyEntityandCatrhory']
-        );
+        // Route::get(
+        //     'entity/{entityId}/category/{categoryId}/supplier',
+        //     [SupplierController::class, 'getSupplierbyEntityandCatrhory']
+        // );
 
         Route::apiResource('notification', NotificationController::class);
         Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']); // mark read
