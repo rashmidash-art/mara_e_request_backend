@@ -13,7 +13,7 @@ class FileFormatController extends Controller
      */
     public function index()
     {
-        $fileFormats = FileFormat::all();
+        $fileFormats = FileFormat::orderBy('id', 'desc')->get();
         if ($fileFormats->isEmpty()) {
             return response()->json([
                 'status' => 'error',

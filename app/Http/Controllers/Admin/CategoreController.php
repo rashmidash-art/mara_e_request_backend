@@ -36,7 +36,7 @@ class CategoreController extends Controller
 
     public function index()
     {
-        $categories = Category::with([
+        $categories = Category::orderBy('id', 'desc')->with([
             'requestTypes' => function ($q) {
                 $q->where('status', 1); // active only
             },

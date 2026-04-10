@@ -18,84 +18,67 @@ class SupplierController extends Controller
     /**
      * Display all suppliers.
      */
-public function index(Request $request)
-{
-    try {
-        $user = $request->user();
-
-        // Base query
-        $query = Supplier::query();
-
-        // If logged in user is an Entity → filter suppliers
-        if ($user instanceof Entiti) {
-            $query->where('entiti_id', $user->id);
-        }
-
-        // If super admin → no filter (gets all)
-
-        $suppliers = $query->get()->map(function ($supplier) {
-
-            // Categories & departments
-            $categoryIds = $supplier->categories ? explode(',', $supplier->categories) : [];
-            $categories = Category::whereIn('id', $categoryIds)->get(['id', 'name']);
-
-            $departmentIds = $supplier->departments ? explode(',', $supplier->departments) : [];
-            $departments = Department::whereIn('id', $departmentIds)->get(['id', 'name']);
-
-            $supplier->categories_detail = $categories;
-            $supplier->departments_detail = $departments;
-
-            // Requests with ratings
-            $requests = ModelsRequest::with(
+    public function index(Request $request)
+    {
+        try {
+            $user = $request->user();
+            $query = Supplier::query();
+            // For Entity → filter suppliers
+            if ($user instanceof Entiti) {
+                $query->where('entiti_id', $user->id);
+            }
+            // For super admin → no filter (gets all)
+            $suppliers = $query->orderBy('id', 'desc')->get()->map(function ($supplier) {
+                $categoryIds = $supplier->categories ? explode(',', $supplier->categories) : [];
+                $categories = Category::whereIn('id', $categoryIds)->get(['id', 'name']);
+                $departmentIds = $supplier->departments ? explode(',', $supplier->departments) : [];
+                $departments = Department::whereIn('id', $departmentIds)->get(['id', 'name']);
+                $supplier->categories_detail = $categories;
+                $supplier->departments_detail = $departments;
+                // Requests with ratings
+                $requests = ModelsRequest::with(
                     'requestTypeData:id,name',
                     'categoryData:id,name',
                     'supplierRating'
                 )
-                ->where('supplier_id', $supplier->id)
-                ->get()
-                ->map(function ($r) {
-                    return [
-                        'request_id' => $r->request_id,
-                        'title' => $r->requestTypeData->name ?? '—',
-                        'category' => $r->categoryData->name ?? '—',
-                        'amount' => $r->amount,
-                        'status' => $r->status,
-                        'user_rating' => $r->supplierRating->rating ?? null,
-                        'comment' => $r->supplierRating->comment ?? null,
-                    ];
-                });
+                    ->where('supplier_id', $supplier->id)
+                    ->get()
+                    ->map(function ($r) {
+                        return [
+                            'request_id' => $r->request_id,
+                            'title' => $r->requestTypeData->name ?? '—',
+                            'category' => $r->categoryData->name ?? '—',
+                            'amount' => $r->amount,
+                            'status' => $r->status,
+                            'user_rating' => $r->supplierRating->rating ?? null,
+                            'comment' => $r->supplierRating->comment ?? null,
+                        ];
+                    });
 
-            $supplier->requests = $requests;
+                $supplier->requests = $requests;
+                $supplier->total_requests = $requests->count();
+                $ratedRequests = $requests->filter(fn ($r) => $r['user_rating'] !== null);
+                $supplier->completed_ratings = $ratedRequests->count();
+                $supplier->avg_rating = $ratedRequests->count()
+                    ? round($ratedRequests->avg('user_rating'), 1)
+                    : null;
+                return $supplier;
+            });
 
-            // Total requests
-            $supplier->total_requests = $requests->count();
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Suppliers retrieved successfully',
+                'data' => $suppliers,
+            ], 200);
 
-            // Completed ratings
-            $ratedRequests = $requests->filter(fn ($r) => $r['user_rating'] !== null);
-            $supplier->completed_ratings = $ratedRequests->count();
-
-            // Average rating
-            $supplier->avg_rating = $ratedRequests->count()
-                ? round($ratedRequests->avg('user_rating'), 1)
-                : null;
-
-            return $supplier;
-        });
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Suppliers retrieved successfully',
-            'data' => $suppliers,
-        ], 200);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Failed to retrieve suppliers',
-            'error' => $e->getMessage(),
-        ], 500);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to retrieve suppliers',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
-}
 
     /**
      * Store a new supplier.

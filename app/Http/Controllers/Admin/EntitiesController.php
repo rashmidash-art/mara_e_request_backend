@@ -47,7 +47,7 @@ class EntitiesController extends Controller
         if ($user instanceof User && $user->user_type == 0) {
             return response()->json([
                 'status' => 'success',
-                'data' => Entiti::all(),
+                'data' => Entiti::orderBy('id', 'desc')->get(),
             ]);
         }
 
@@ -272,7 +272,12 @@ class EntitiesController extends Controller
 
     public function getUserbyEntiti($id)
     {
-        $users = User::where('entiti_id', $id)->get();
+        $users = User::where('entiti_id', $id)
+            ->where(function ($query) {
+                $query->where('status', 1)
+                    ->orWhere('status', 'Active');
+            })
+            ->get();
 
         return response()->json([
             'status' => 'success',
@@ -302,6 +307,10 @@ class EntitiesController extends Controller
         $categories = DB::table('entity_requests')
             ->join('categories', 'categories.id', '=', 'entity_requests.categore_id')
             ->where('entity_requests.entity_id', $entityId)
+            ->where(function ($query) {
+                $query->where('categories.status', 0)
+                    ->orWhere('categories.status', 'Active');
+            })
             ->select('categories.id', 'categories.name')
             ->distinct()
             ->get();

@@ -24,12 +24,12 @@ class DeprtmentController extends Controller
 
             $user = $request->user();
             if ($user instanceof User && $user->user_type == 0) {
-                $departments = Department::all();
+                $departments = Department::orderBy('id', 'desc')->get();
             } elseif ($user instanceof Entiti) {
                 $departments = Department::where('entiti_id', $user->id)->get();
             } elseif ($user instanceof User) {
                 // If you want normal users to see all
-                $departments = Department::all();
+                $departments = Department::orderBy('id', 'desc')->get();
                 // OR restrict by permissions if needed
                 // $departments = Department::whereIn('id', $user->departments()->pluck('department_id'))->get();
             }
@@ -84,7 +84,7 @@ class DeprtmentController extends Controller
             $entity = Entiti::findOrFail($entitiId);
 
             $currentDepartmentBudget = Department::where('entiti_id', $entitiId)
-             ->where('department_code', '!=', 'ALL')
+                ->where('department_code', '!=', 'ALL')
                 ->sum('budget');
 
             $requestedBudget = $request->budget ?? 0;
@@ -236,35 +236,35 @@ class DeprtmentController extends Controller
 
             // Budget validations
             // Budget validations - ONLY run if budget is being updated
-if ($request->has('budget')) {
-    $requestedBudget = $request->budget;
+            if ($request->has('budget')) {
+                $requestedBudget = $request->budget;
 
-    // Get sum of all departments EXCEPT the current one AND EXCEPT the 'ALL' department
-    $currentDepartmentBudget = Department::where('entiti_id', $entityId)
-        ->where('id', '!=', $department->id)
-        ->where('department_code', '!=', 'ALL')  // Add this line to exclude ALL department
-        ->sum('budget');
+                // Get sum of all departments EXCEPT the current one AND EXCEPT the 'ALL' department
+                $currentDepartmentBudget = Department::where('entiti_id', $entityId)
+                    ->where('id', '!=', $department->id)
+                    ->where('department_code', '!=', 'ALL')  // Add this line to exclude ALL department
+                    ->sum('budget');
 
-    if ($requestedBudget > $entity->budget) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Department budget cannot exceed entity budget of '.$entity->budget,
-        ], 400);
-    }
+                if ($requestedBudget > $entity->budget) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Department budget cannot exceed entity budget of '.$entity->budget,
+                    ], 400);
+                }
 
-    if (($currentDepartmentBudget + $requestedBudget) > $entity->budget) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Total department budgets ('
-                .($currentDepartmentBudget + $requestedBudget)
-                .') cannot exceed entity budget of '
-                .$entity->budget,
-        ], 400);
-    }
-} else {
-    // If budget not being updated, keep the existing budget
-    $requestedBudget = $department->budget;
-}
+                if (($currentDepartmentBudget + $requestedBudget) > $entity->budget) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Total department budgets ('
+                            .($currentDepartmentBudget + $requestedBudget)
+                            .') cannot exceed entity budget of '
+                            .$entity->budget,
+                    ], 400);
+                }
+            } else {
+                // If budget not being updated, keep the existing budget
+                $requestedBudget = $department->budget;
+            }
 
             // Regenerate BC-Dimension only if department_code changed
             $newBcDimension = $department->bc_dimention_value;
@@ -448,7 +448,7 @@ if ($request->has('budget')) {
 
     public function getBudgetCodeByDepartment($id)
     {
-        $department = Department::with('budgetCodes')->findOrFail($id);
+        $department = Department::with('budgetCodes')->where('status',0)->findOrFail($id);
 
         return response()->json([
             'status' => 'success',

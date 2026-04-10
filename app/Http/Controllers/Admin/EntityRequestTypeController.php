@@ -17,7 +17,31 @@ class EntityRequestTypeController extends Controller
     {
         $user = $request->user();
 
-        $query = EntityRequest::with(['entity', 'category', 'requestType']);
+        $query = EntityRequest::with([
+            'entity' => function ($q) {
+                $q->where(function ($query) {
+                    $query->where('status', 1)
+                        ->orWhere('status', 'Active');
+                });
+            },
+            'category' => function ($q) {
+                $q->where(function ($query) {
+                    $query->where('status', 0)
+                        ->orWhere('status', 'Active');
+                });
+            },
+            'requestType' => function ($q) {
+                $q->where(function ($query) {
+                    $query->where('status', 1)
+                        ->orWhere('status', 'Active');
+                });
+            },
+        ]);
+
+        // $query->where(function ($q) {
+        //     $q->where('status', 0)
+        //         ->orWhere('status', 'Active');
+        // });
 
         if ($request->filled('entity_id')) {
             $query->where('entity_id', $request->entity_id);
