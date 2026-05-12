@@ -52,6 +52,7 @@ class EntityRequestTypeController extends Controller
             $query->where('categore_id', $request->categore_id);
         }
 
+        $query->orderBy('id', 'desc');
         $data = $query->get();
 
         Log::info('Entity filter', [

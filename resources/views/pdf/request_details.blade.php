@@ -149,18 +149,25 @@
 
     <h4 class="heading">INTERNAL MEMO</h4>
     <hr>
-    <h3>Subject : <u>{{ $request->title }}</u></h3>
+    {{-- <h3>Subject : <u>{{ $request->title }}</u></h3> --}}
     <p><b>Request ID:</b> {{ $request->request_id }}</p>
-    <p><b>Requested By:</b> {{ $request->userData?->name ?? '-' }}</p>
-    <p><b>Date:</b> {{ $request->created_at?->format('Y-m-d') }}</p>
-    <p><b>Request Type:</b> {{ $request->requestTypeData?->name ?? '-' }}</p>
-
-    <hr>
-    <h5>Request Details</h5>
-    <p><b>Amount:</b> RM {{ number_format($request->amount, 2) }}</p>
+    <p><b>Requested By:</b> {{ $request->userData?->name ?? '-' }} ({{ $request->userData?->name ?? '-' }})</p>
     <p><b>Department:</b> {{ $request->departmentData?->name ?? '-' }}</p>
-    <p><b>Vendor Name:</b> {{ $request->supplierData?->name ?? '-' }}</p>
-    <p><b>Priority:</b> {{ $request->priority ?? '-' }}</p>
+    <p><b>Date:</b> {{ $request->created_at?->format('Y-m-d') }}</p>
+    {{-- <p><b>Request Type:</b> {{ $request->requestTypeData?->name ?? '-' }}</p> --}}
+    <p> <b>Subject :</b>{{ $request->title }}</p>
+    <hr>
+    <br>
+    <h3>Approval Request Details</h3>
+    <br>
+    <p><b>Request Type:</b> {{ $request->categoryData?->name ?? '-' }}</p>
+    <p><b>Recommended Vendor :</b> {{ $request->supplierData?->name ?? '-' }}</p>
+    <p><b>Budget Item :</b> {{ $budget?->title ?? 'N/A' }}</p>
+    <p><b>Budget Code:</b> {{ $budget?->budget_code ?? 'Non-Financial Type' }}</p>
+    <p><b>Cost:</b> RM {{ number_format($request->amount, 2) }}</p>
+    <p><b>Priority:</b> {{ ucfirst($request->priority ?? '-') }}</p>
+    {{--
+    <p><b>Priority:</b> {{ $request->priority ?? '-' }}</p> --}}
     <p><b>Description:</b><br> {!! $request->description === strip_tags($request->description)
         ? nl2br(e($request->description))
         : $request->description !!}</p>

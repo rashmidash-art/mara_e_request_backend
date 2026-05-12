@@ -19,6 +19,7 @@ use App\Models\User;
 use App\Models\WorkFlow;
 use App\Models\WorkflowRoleAssign;
 use App\Models\WorkflowStep;
+use App\Services\MailService;
 use App\Services\NotificationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -307,13 +308,12 @@ class CreateRequestController extends Controller
 
             // ------------------------- CREATE REQUEST WITH TRANSACTION ------------------------- //
             DB::transaction(function () use ($request, $workflow, $status, &$req) {
-                // Generate Request ID
+
                 $year = date('Y');
                 $last = ModelsRequest::whereYear('created_at', $year)->orderBy('id', 'desc')->first();
                 $nextNumber = $last ? $last->id + 1 : 1;
                 $request_no = "REQ-{$year}-".str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
 
-                // Create request
                 $req = ModelsRequest::create([
                     'request_id' => $request_no,
                     'title' => $request->title,
@@ -342,7 +342,6 @@ class CreateRequestController extends Controller
                         if (! $file) {
                             continue;
                         }
-
                         $departmentName = Department::find($req->department)->name ?? 'unknown';
                         $departmentName = str_replace(' ', '_', strtolower($departmentName));
                         $newFileName = $req->request_id.'_'.$req->entiti.'_'.$departmentName.'_'.$file->getClientOriginalName();
@@ -356,28 +355,43 @@ class CreateRequestController extends Controller
                     }
                 }
 
-                // Skip workflow assignment if draft
+                // Skip workflow + mail if draft
                 if ($status === 'draft') {
                     return;
                 }
 
+                // ✅ Send mail to requestor
+                $requestUser = User::find((int) $req->user);
+                if ($requestUser) {
+                    MailService::send(
+                        $requestUser,
+                        'Request Submitted',
+                        "Your request {$req->request_id} has been submitted successfully.",
+                        $req,
+                        'System'
+                    );
+                }
+
                 // Workflow assignment
-                // Workflow assignment - MODIFIED FOR STEP-BY-STEP NOTIFICATIONS
-                // Workflow assignment - SKIP CREATION STEP
                 $steps = WorkflowStep::where('workflow_id', $workflow->id)
                     ->orderBy('order_id')
                     ->get();
+
                 $approvalSteps = $steps->filter(function ($step) {
                     return $step->status !== 'Yes';
                 })->values();
+
                 if ($approvalSteps->isEmpty()) {
                     $approvalSteps = $steps->slice(1)->values();
                 }
+
                 foreach ($approvalSteps as $index => $step) {
                     $isFirstApprovalStep = ($index === 0);
+
                     $roleAssigns = WorkflowRoleAssign::where('workflow_id', $workflow->id)
                         ->where('step_id', $step->id)
                         ->get();
+
                     foreach ($roleAssigns as $roleAssign) {
                         $users = collect();
                         if ($roleAssign->specific_user == 1 && $roleAssign->user_id) {
@@ -389,26 +403,28 @@ class CreateRequestController extends Controller
                                 $q->where('roles.id', $roleAssign->role_id);
                             })->get();
                         }
+
                         if ($users->isEmpty()) {
                             continue;
                         }
+
                         if (strtolower($roleAssign->approval_logic) === 'and') {
-                            foreach ($users as $user) {
-                                RequestWorkflowDetails::create([
+                            foreach ($users as $assignee) {
+                                $detail = RequestWorkflowDetails::create([
                                     'request_id' => $req->request_id,
                                     'workflow_id' => $workflow->id,
                                     'workflow_step_id' => $step->id,
                                     'workflow_role_id' => $roleAssign->role_id,
-                                    'assigned_user_id' => $user->id,
+                                    'assigned_user_id' => $assignee->id,
                                     'status' => $isFirstApprovalStep ? 'pending' : 'waiting',
                                     'approval_logic' => strtolower($roleAssign->approval_logic),
                                     'is_sendback' => 0,
+                                    'is_mail_sent' => 'n',
                                 ]);
 
-                                // ONLY send notifications for the FIRST APPROVAL step
                                 if ($isFirstApprovalStep) {
                                     NotificationService::send(
-                                        $user->id,
+                                        $assignee->id,
                                         'New Request Assigned',
                                         "You have been assigned a new request {$req->request_id} to approve.",
                                         'request_assigned',
@@ -416,11 +432,25 @@ class CreateRequestController extends Controller
                                         'request',
                                         'Workflow assignment'
                                     );
+
+                                    // ✅ Send mail + update is_mail_sent
+                                    $mailSent = MailService::send(
+                                        $assignee,
+                                        'New Request Assigned',
+                                        "You have been assigned a new request {$req->request_id} to approve.",
+                                        $req,
+                                        'System'
+                                    );
+
+                                    if ($mailSent) {
+                                        $detail->update(['is_mail_sent' => 'y']);
+                                    }
                                 }
                             }
                         } else {
                             $assignedUser = $users->first();
-                            RequestWorkflowDetails::create([
+
+                            $detail = RequestWorkflowDetails::create([
                                 'request_id' => $req->request_id,
                                 'workflow_id' => $workflow->id,
                                 'workflow_step_id' => $step->id,
@@ -429,9 +459,9 @@ class CreateRequestController extends Controller
                                 'status' => $isFirstApprovalStep ? 'pending' : 'waiting',
                                 'approval_logic' => strtolower($roleAssign->approval_logic),
                                 'is_sendback' => 0,
+                                'is_mail_sent' => 'n',
                             ]);
 
-                            // ONLY send notifications for the FIRST APPROVAL step
                             if ($isFirstApprovalStep) {
                                 NotificationService::send(
                                     $assignedUser->id,
@@ -442,6 +472,19 @@ class CreateRequestController extends Controller
                                     'request',
                                     'Assigned via workflow step '.$step->order_id
                                 );
+
+                                // ✅ Send mail + update is_mail_sent
+                                $mailSent = MailService::send(
+                                    $assignedUser,
+                                    'New Request Assigned',
+                                    "Request {$req->request_id} has been assigned to you for approval.",
+                                    $req,
+                                    'System'
+                                );
+
+                                if ($mailSent) {
+                                    $detail->update(['is_mail_sent' => 'y']);
+                                }
                             }
                         }
                     }
@@ -696,6 +739,14 @@ class CreateRequestController extends Controller
                                             'request',
                                             'Workflow assignment'
                                         );
+
+                                        MailService::send(
+                                            $user,
+                                            'New Request Assigned',
+                                            "You have been assigned a new request {$req->request_id} to approve.",
+                                            $req,
+                                            'System'
+                                        );
                                     }
                                 }
                             } else {
@@ -720,6 +771,14 @@ class CreateRequestController extends Controller
                                         $req->request_id,
                                         'request',
                                         'Assigned via workflow step '.$step->order_id
+                                    );
+
+                                    MailService::send(
+                                        $user,
+                                        'New Request Assigned',
+                                        "You have been assigned a new request {$req->request_id} to approve.",
+                                        $req,
+                                        'System'
                                     );
                                 }
                             }
@@ -1006,7 +1065,7 @@ class CreateRequestController extends Controller
             $baseQuery = ModelsRequest::with([
                 'categoryData:id,name',
                 'entityData:id,name',
-                'userData:id,name',
+                'userData:id,name,designation',
                 'requestTypeData:id,name',
                 'departmentData:id,name',
                 'supplierData:id,name',
@@ -1346,7 +1405,7 @@ class CreateRequestController extends Controller
     {
         try {
             $requestData = ModelsRequest::with([
-                'userData:id,name',
+                'userData:id,name,designation',
                 'categoryData:id,name',
                 'departmentData:id,name',
                 'supplierData:id,name',
@@ -1373,6 +1432,33 @@ class CreateRequestController extends Controller
                         ->orWhere('request_id', $id); // REQ-2026-071
                 })
                 ->firstOrFail();
+
+            $isBehalf = $requestData->behalf_of === 1;
+
+            // Pick correct department ID
+            $departmentId = $isBehalf
+                ? $requestData->behalf_of_department
+                : $requestData->department;
+
+            // Pick correct budget code ID
+            $budgetCodeId = $isBehalf
+                ? $requestData->behalf_of_buget_code
+                : $requestData->budget_code;
+
+            // Fetch department
+            $department = \App\Models\Department::find($departmentId);
+
+            // Fetch budget details
+            $budget = $budgetCodeId
+                ? \App\Models\BudgetCode::select(
+                    'id',
+                    'title',
+                    'budget_code',
+                    'budget_limit',
+                    'description',
+                    'status'
+                )->where('id', $budgetCodeId)->first()
+                : null;
 
             $workflowTimeline = $requestData->workflowHistory
                 ->groupBy(fn ($wf) => $wf->workflowStep?->id)
