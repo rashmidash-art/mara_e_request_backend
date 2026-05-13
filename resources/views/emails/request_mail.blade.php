@@ -177,7 +177,7 @@
                                 </i>
                             </p>
 
-                            <p style="margin:0;">
+                            <p style="margin:0 0 18px;">
                                 <i>
                                     This email may contain personal data protected under the
                                     Personal Data Protection Act 2010 (PDPA). Any unauthorised
@@ -185,36 +185,6 @@
                                     constitute an offence under Malaysian law.
                                 </i>
                             </p>
-
-                            <p style="margin:0;">
-                                <i>
-                                    This email and any attachments may contain confidential, privileged, or legally
-                                    protected information intended solely for the use of the designated recipient(s). If
-                                    you are not the intended recipient, you are hereby notified that any review,
-                                    disclosure, distribution, copying, or use of this communication is strictly
-                                    prohibited. If you have received this message in error, please notify the sender
-                                    immediately and permanently delete it from your system.
-                                </i>
-                            </p>
-
-                            <p style="margin:0;">
-                                <i>
-                                    The information contained herein is provided on an “as is” basis and may be
-                                    incomplete, inaccurate, or subject to change without prior notice. The sender makes
-                                    no representations or warranties as to the accuracy or completeness of the contents
-                                    and expressly disclaims any liability for any loss or damage—direct, indirect,
-                                    incidental, or consequential—arising from reliance on or use of this communication.
-                                </i>
-                            </p>
-
-                            <p style="margin:0;">
-                                <i>
-                                    This email may contain personal data protected under the Personal Data Protection
-                                    Act 2010 (PDPA). Any unauthorised processing, disclosure, or misuse of such data may
-                                    constitute an offence under Malaysian law.
-                                </i>
-                            </p>
-
                         </td>
                     </tr>
 
