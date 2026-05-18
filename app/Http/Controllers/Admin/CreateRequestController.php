@@ -1491,6 +1491,12 @@ class CreateRequestController extends Controller
                 ->values()
                 ->toArray();
 
+            $lastStepUsers = collect($workflowTimeline)
+                ->last();
+
+            // Convert assigned users to string
+            $toUsers = $lastStepUsers['assigned_user'] ?? '-';
+
             $lifecycleTimeline = [];
 
             /* PO Created */
@@ -1546,6 +1552,7 @@ class CreateRequestController extends Controller
                 'request' => $requestData,
                 'workflowTimeline' => $workflowTimeline,
                 'lifecycleTimeline' => $lifecycleTimeline,
+                'toUsers' => $toUsers,
             ])->setPaper('A4', 'portrait');
 
             return $pdf->download('request-'.$requestData->request_id.'.pdf');
