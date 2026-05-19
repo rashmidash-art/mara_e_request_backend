@@ -1102,7 +1102,11 @@ class CreateRequestController extends Controller
                         return [
                             'stage' => $first->workflowStep?->name ?? 'N/A',
                             'role' => $steps->pluck('role.name')->unique()->join(', '),
-                            'assigned_user' => $lastAction?->assignedUser?->name,
+                            // 'assigned_user' => $lastAction?->assignedUser?->name,
+
+                            'assigned_user' => $lastAction?->assignedUser?->name
+                                ?? $steps->pluck('assignedUser.name')->filter()->unique()->join(', ')
+                                ?? 'Pending',
                             'status' => $lastAction?->status ?? 'pending',
                             'date' => $lastAction?->updated_at?->format('Y-m-d H:i'),
                         ];
@@ -1482,7 +1486,11 @@ class CreateRequestController extends Controller
                     return [
                         'step' => $stepGroup->first()?->workflowStep?->name ?? 'Approval Step',
                         'role' => $stepGroup->first()?->role?->name ?? 'N/A',
-                        'assigned_user' => 'Pending',
+                        'assigned_user' => $stepGroup
+                                        ->pluck('assignedUser.name')
+                                        ->filter()
+                                        ->unique()
+                                        ->implode(', ') ?: 'Pending',
                         'status' => 'pending',
                         'date' => null,
                         'remark' => '',
