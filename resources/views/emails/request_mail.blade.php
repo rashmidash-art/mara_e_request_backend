@@ -116,13 +116,11 @@
     </table>
 
     <!-- Bottom Disclaimer Section (Vertical Layout) -->
-    <table width="100%" cellpadding="0" cellspacing="0" border="0"
+    {{-- <table width="100%" cellpadding="0" cellspacing="0" border="0"
         style="background:#f2f2f2; padding:10px 0; margin-top:20px;">
         <tr>
             <td align="center">
                 <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#e9e9eb;">
-
-                    <!-- Top Notice -->
                     <tr>
                         <td style="padding:15px 20px; text-align:center; font-size:11px; color:#555;">
                             <p style="margin:0 0 8px;">
@@ -137,8 +135,6 @@
                             </p>
                         </td>
                     </tr>
-
-                    <!-- Blue Footer Bar -->
                     <tr>
                         <td style="background:#576e86; height:80px; text-align:center;">
                             <span style="color:#ffffff; font-size:16px; font-weight:bold;">
@@ -147,7 +143,6 @@
                         </td>
                     </tr>
 
-                    <!-- Disclaimer Content -->
                     <tr>
                         <td style="padding:20px; font-size:11px; line-height:18px; color:#333;">
 
@@ -191,7 +186,7 @@
                 </table>
             </td>
         </tr>
-    </table>
+    </table> --}}
 
 </body>
 
