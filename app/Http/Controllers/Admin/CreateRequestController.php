@@ -1486,7 +1486,8 @@ class CreateRequestController extends Controller
                     return [
                         'step' => $stepGroup->first()?->workflowStep?->name ?? 'Approval Step',
                         'role' => $stepGroup->first()?->role?->name ?? 'N/A',
-                        'assigned_user' => $stepGroup
+                        'assigned_user' => 'Pending',
+                        'last_user' => $stepGroup
                                         ->pluck('assignedUser.name')
                                         ->filter()
                                         ->unique()
@@ -1503,7 +1504,7 @@ class CreateRequestController extends Controller
                 ->last();
 
             // Convert assigned users to string
-            $toUsers = $lastStepUsers['assigned_user'] ?? '-';
+            $toUsers = $lastStepUsers['last_user'] ?? '-';
 
             $lifecycleTimeline = [];
 
