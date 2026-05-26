@@ -151,7 +151,12 @@
     <hr>
     {{-- <h3>Subject : <u>{{ $request->title }}</u></h3> --}}
     <p><b>Request ID:</b> {{ $request->request_id }}</p>
-    <p><b>To:</b> {{ $toUsers }}</p>
+    {{-- <p><b>To:</b> {{ $toUsers }}</p> --}}
+    @if ($toUsers)
+        <p><b>To:</b> {{ $toUsers }}</p>
+    @else
+        <p><del><b>To:</b></del></p>
+    @endif
     <p><b>Requested By:</b> {{ $request->userData?->name ?? '-' }} ({{ $request->userData?->name ?? '-' }})</p>
     <p><b>Department:</b> {{ $request->departmentData?->name ?? '-' }}</p>
     <p><b>Date:</b> {{ $request->created_at?->format('Y-m-d') }}</p>

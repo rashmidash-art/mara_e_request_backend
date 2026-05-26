@@ -774,7 +774,7 @@ class CreateRequestController extends Controller
                                     );
 
                                     MailService::send(
-                                        $user,
+                                        $assignedUser,
                                         'New Request Assigned',
                                         "You have been assigned a new request {$req->request_id} to approve.",
                                         $req,
@@ -1475,9 +1475,11 @@ class CreateRequestController extends Controller
                             'step' => $stepGroup->first()?->workflowStep?->name,
                             'role' => $actionTaken->pluck('role.name')->unique()->implode(', '),
                             'assigned_user' => $actionTaken->pluck('assignedUser.name')->unique()->implode(', '),
+                            'last_user' => $actionTaken->pluck('assignedUser.name')->unique()->implode(', '),
                             'status' => $actionTaken->contains('status', 'approved')
-                                ? 'approved'
-                                : 'rejected',
+            ? 'approved'
+            : ($actionTaken->contains('status', 'rejected') ? 'rejected' : 'cancelled'), // ← add
+
                             'date' => optional($actionTaken->max('updated_at'))?->format('Y-m-d'),
                             'remark' => $actionTaken->pluck('remark')->filter()->implode(' | '),
                         ];
@@ -1488,10 +1490,10 @@ class CreateRequestController extends Controller
                         'role' => $stepGroup->first()?->role?->name ?? 'N/A',
                         'assigned_user' => 'Pending',
                         'last_user' => $stepGroup
-                                        ->pluck('assignedUser.name')
-                                        ->filter()
-                                        ->unique()
-                                        ->implode(', ') ?: 'Pending',
+                            ->pluck('assignedUser.name')
+                            ->filter()
+                            ->unique()
+                            ->implode(', ') ?: 'Pending',
                         'status' => 'pending',
                         'date' => null,
                         'remark' => '',
@@ -1500,13 +1502,22 @@ class CreateRequestController extends Controller
                 ->values()
                 ->toArray();
 
+            $allCancelled = collect($workflowTimeline)->every(fn ($step) => in_array(strtolower($step['status'] ?? ''), ['cancelled', 'withdraw', 'withdrawn'])
+            );
+
+            $isWithdrawn = in_array($requestData->status, ['withdraw', 'withdrawn', 'draft']);
+
             $lastStepUsers = collect($workflowTimeline)
                 ->last();
 
             // Convert assigned users to string
-            $toUsers = $lastStepUsers['last_user'] ?? '-';
+            // $toUsers = $lastStepUsers['last_user'] ?? '-';
+            $toUsers = (! empty($workflowTimeline) && ! $allCancelled && ! $isWithdrawn)
+    ? ($lastStepUsers['last_user'] ?? '-')
+    : null;
 
-            $lifecycleTimeline = [];
+
+    $lifecycleTimeline = [];
 
             /* PO Created */
             if (! empty($requestData->poDetails) && ! empty($requestData->poDetails->po_date)) {
