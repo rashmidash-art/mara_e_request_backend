@@ -13,6 +13,25 @@ class NotificationController extends Controller
     /**
      * Display a listing of the resource.
      */
+    // public function index(Request $request)
+    // {
+    //     $user = Auth::user();
+    //     if (! $user) {
+    //         return response()->json(['status' => 'error', 'message' => 'Unauthenticated'], 401);
+    //     }
+
+    //     $notifications = Notification::where('user_id', $user->id)
+    //         ->where('is_read', 0)
+    //         ->orderBy('created_at', 'desc')
+    //         ->limit(10)
+    //         ->get();
+
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'data' => $notifications,
+    //     ]);
+    // }
+
     public function index(Request $request)
     {
         $user = Auth::user();
@@ -20,15 +39,45 @@ class NotificationController extends Controller
             return response()->json(['status' => 'error', 'message' => 'Unauthenticated'], 401);
         }
 
-        $notifications = Notification::where('user_id', $user->id)
-            ->where('is_read', 0)
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
+        $perPage = $request->get('per_page', 15);
+        $page = $request->get('page', 1);
+
+        $query = Notification::where('user_id', $user->id)
+            ->orderBy('created_at', 'desc');
+
+        $total = $query->count();
+
+        // If total <= 15, skip pagination overhead
+        if ($total <= $perPage) {
+            $data = $query->get();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $data,
+                'pagination' => [
+                    'total' => $total,
+                    'per_page' => $perPage,
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'from' => $total > 0 ? 1 : null,
+                    'to' => $total > 0 ? $total : null,
+                ],
+            ]);
+        }
+
+        $paginated = $query->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json([
             'status' => 'success',
-            'data' => $notifications,
+            'data' => $paginated->items(),   // ← always a flat array
+            'pagination' => [
+                'total' => $paginated->total(),
+                'per_page' => $paginated->perPage(),
+                'current_page' => $paginated->currentPage(),
+                'last_page' => $paginated->lastPage(),
+                'from' => $paginated->firstItem(),
+                'to' => $paginated->lastItem(),
+            ],
         ]);
     }
 

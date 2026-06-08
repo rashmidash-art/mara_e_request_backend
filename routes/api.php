@@ -56,6 +56,9 @@ Route::post('password/reset', [PasswordResetContrller::class, 'reset']);
 Route::get('categore/{id}/document', action: [DocumentController::class, 'getDocumentsByCategore']);
 Route::get('request_type/{id}/document', action: [DocumentController::class, 'getDocumentsByRequestType']);
 Route::get('requests/{id}/download-pdf', [CreateRequestController::class, 'downloadRequestPdf']);
+Route::get('/action-document/{token}', [CreateRequestController::class, 'serveWorkflowDocument'])
+    ->name('workflow.document');
+
 Route::get('budget-summary', [BudgetController::class, 'budgetSummary']);
 Route::get('/entity/{id}/categories', [EntitiesController::class, 'getCategoryByEntity']);
 
@@ -65,7 +68,7 @@ Route::middleware('auth:api,entiti-api')->group(function () {
             'entity/{entityId}/category/{categoryId}/supplier',
             [SupplierController::class, 'getSupplierbyEntityandCatrhory']
         );
-        
+
 });
 
 Route::middleware('auth:api,entiti-api')->group(function () {
@@ -206,24 +209,5 @@ Route::middleware('auth:api,entiti-api')->group(function () {
 
         Route::apiResource('budgetCode', controller: BudgetCodeController::class);
         Route::get('budgetCode/preview', [BudgetCodeController::class, 'preview']);
-        // Route::apiResource('requestWorkflow', controller: RequestWorkflowDetailsController::class);
-        // Route::post('/request-workflow/{request_id}/action', [RequestWorkflowDetailsController::class, 'takeAction']);
-
     });
-
-    // Route::middleware(['auth', 'role:admin'])->group(function () {
-    //     Route::apiResource('roles', RoleController::class);
-    //     Route::post('roles/assign', [RoleController::class, 'assignRole']);
-    //     Route::post('roles/remove', [RoleController::class, 'removeRole']);
-
-    //     // Master Modules
-    //     Route::apiResource('entities', EntitiesController::class);
-    //     Route::apiResource('work-flows', WorkFlowController::class);
-    //     Route::apiResource('managers', ManagerController::class);
-    //     Route::apiResource('department', DeprtmentController::class);
-    //     Route::apiResource('users', UserController::class);
-    //     Route::apiResource('categore', CategoreController::class);
-    //     Route::apiResource('supplier', SupplierController::class);
-    // });
-
 });

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\BudgetCode;
+use App\Models\Department;
 use App\Models\Request as ModelsRequest; // Eloquent model alias
 use App\Models\RequestWorkflowDetails;
 use App\Models\User;
@@ -24,58 +26,256 @@ class RequestWorkflowDetailsController extends Controller
             $q->where('action_taken_by', $userId);
         })
             ->with([
-                'userData',
-                'departmentData',
-                'workflowUsers' => function ($q) use ($userId) {
-                    $q->where('action_taken_by', $userId)
-                        ->latest('updated_at')
-                        ->limit(1)
-                        ->with(['assignedUser', 'role', 'workflowStep']);
+                'categoryData:id,name',
+                'entityData:id,name',
+                'userData:id,name,email,designation',
+                'requestTypeData:id,name',
+                'departmentData:id,name',
+                'supplierData:id,name',
+                'documents:id,request_id,document_id,document',
+                'workflowHistory' => function ($q) {
+                    $q->with(['role', 'assignedUser', 'workflowStep'])
+                        ->orderBy('id', 'asc');
                 },
                 'requestDetailsDocuments',
-                'supplierData',
-                'requestTypeData',
-                'categoryData',
+                'supplierRating.user',
+                'poDetails',
+                'deliveries',
+                'payments',
             ])
             ->orderBy('updated_at', 'desc')
             ->get();
 
-        $data = $requests->map(function ($request) {
-            $lastActionByUser = $request->workflowUsers->first();
+        $data = $requests->map(function ($req) {
+
+            $workflowTimeline = $req->workflowHistory
+                ->groupBy('workflow_step_id')
+                ->map(function ($steps) {
+
+                    $first = $steps->first();
+
+                    $lastAction = $steps->whereIn('status', ['approved', 'rejected'])
+                        ->sortByDesc('updated_at')
+                        ->first();
+
+                    return [
+                        'stage' => $first->workflowStep?->name ?? 'N/A',
+                        'role' => $steps->pluck('role.name')->unique()->join(', '),
+
+                        'assigned_user' => $lastAction?->assignedUser?->name
+                            ?? $steps->pluck('assignedUser.name')->filter()->unique()->join(', ')
+                            ?? 'Pending',
+
+                        'status' => $lastAction?->status ?? 'pending',
+                        'date' => $lastAction?->updated_at?->format('Y-m-d H:i'),
+                    ];
+                })
+                ->values()
+                ->toArray();
+
+            $statusTimeline = [];
+
+            if (
+                $req->status !== ModelsRequest::DRAFT &&
+                $req->status !== ModelsRequest::WITHDRAW
+            ) {
+                $statusTimeline[] = [
+                    'stage' => 'Request Submitted',
+                    'status' => 'submitted',
+                    'actor_name' => $req->userData?->name ?? 'Requester',
+                    'date' => $req->created_at?->format('Y-m-d H:i'),
+                ];
+            }
+
+            if ($req->status === ModelsRequest::DRAFT) {
+                $statusTimeline[] = [
+                    'stage' => 'Request Converted to Draft',
+                    'status' => 'draft',
+                    'actor_name' => $req->userData?->name ?? 'Requester',
+                    'date' => $req->updated_at?->format('Y-m-d H:i'),
+                ];
+            }
+
+            if ($req->status === ModelsRequest::WITHDRAW) {
+
+                $statusTimeline[] = [
+                    'stage' => 'Withdrawn',
+                    'status' => 'withdraw',
+                    'actor_name' => $req->userData?->name ?? 'Requester',
+                    'date' => $req->updated_at?->format('Y-m-d H:i'),
+                ];
+
+            } else {
+
+                foreach ($workflowTimeline as $step) {
+                    $statusTimeline[] = $step;
+                }
+
+                if ($req->poDetails) {
+                    $statusTimeline[] = [
+                        'stage' => 'PO Created',
+                        'status' => 'po created',
+                        'actor_name' => User::find($req->poDetails->created_by)?->name ?? 'System',
+                        // 'actor_name' => $req->poDetails->createdBy?->name ?? 'System',
+                        'date' => \Carbon\Carbon::parse($req->poDetails->po_date)->format('Y-m-d H:i'),
+                    ];
+                }
+
+                $finalDelivery = $req->deliveries()
+                    ->where('is_delivery_completed', 1)
+                    ->first();
+
+                if ($finalDelivery) {
+                    $statusTimeline[] = [
+                        'stage' => 'Delivery Completed',
+                        'status' => 'delivery completed',
+                        'actor_name' => 'System',
+                        'date' => \Carbon\Carbon::parse($finalDelivery->delivery_date)->format('Y-m-d H:i'),
+                    ];
+                }
+
+                $finalPayment = $req->payments()
+                    ->where('is_payment_completed', 1)
+                    ->first();
+
+                if ($finalPayment) {
+                    $statusTimeline[] = [
+                        'stage' => 'Payment Completed',
+                        'status' => 'payment completed',
+                        'actor_name' => 'System',
+                        'date' => \Carbon\Carbon::parse($finalPayment->payment_date)->format('Y-m-d H:i'),
+                    ];
+                }
+
+                if ($req->supplierRating) {
+                    $statusTimeline[] = [
+                        'stage' => 'Supplier Rated',
+                        'status' => 'supplier rated',
+                        'actor_name' => $req->supplierRating->user?->name ?? 'Requester',
+                        'date' => $req->supplierRating->created_at?->format('Y-m-d H:i'),
+                    ];
+                }
+
+                if ($req->status === ModelsRequest::CLOSED) {
+                    $statusTimeline[] = [
+                        'stage' => 'Closed',
+                        'status' => 'closed',
+                        'actor_name' => 'System',
+                        'date' => $req->updated_at?->format('Y-m-d H:i'),
+                    ];
+                }
+            }
+
+            $finalStatus = $req->getFinalStatus();
+
+            $isBehalf = $req->behalf_of === 1;
+
+            $departmentId = $isBehalf
+                ? $req->behalf_of_department
+                : $req->department;
+
+            $budgetCodeId = $isBehalf
+                ? $req->behalf_of_buget_code
+                : $req->budget_code;
+
+            $department = Department::find($departmentId);
+
+            $budget = $budgetCodeId
+                ? BudgetCode::select(
+                    'id',
+                    'title',
+                    'budget_code',
+                    'budget_limit',
+                    'description',
+                    'status'
+                )->find($budgetCodeId)
+                : null;
+
+            $expectedDate = $req->expected_date
+                ? \Carbon\Carbon::parse($req->expected_date)->format('Y-m-d')
+                : null;
+
+            $rejectionRemark = $req->workflowDetails()
+                ->where('status', 'rejected')
+                ->latest()
+                ->value('remark');
 
             return [
-                'id' => $request->request_id,
-                'title' => $request->title,
-                'description' => $request->description,
-                'amount' => $request->amount,
-                'type' => $request->requestTypeData->name ?? null,
-                'priority' => $request->priority ?? null,
-                'requestor' => [
-                    'id' => $request->userData->id ?? null,
-                    'name' => $request->userData->name ?? null,
-                    'email' => $request->userData->email ?? null,
-                    'department' => $request->departmentData->name ?? null,
+                'id' => $req->id,
+                'request_id' => $req->request_id,
+                'title' => $req->title,
+                'amount' => (float) $req->amount,
+                'priority' => $req->priority,
+                'description' => $req->description,
+                'business_justification' => $req->business_justification,
+                'remark' => $rejectionRemark,
+                'status' => $req->status,
+                'final_status' => $finalStatus['final_status'],
+                'pending_by' => $finalStatus['pending_by'],
+                'current_stage' => $req->status === 'withdraw'
+                    ? 'Withdrawn'
+                    : ($finalStatus['final_status'] === 'approved'
+                        ? 'Completed'
+                        : $finalStatus['pending_by']),
+                'created_at' => $req->created_at?->format('Y-m-d H:i:s'),
+
+                'category' => [
+                    'id' => $req->category,
+                    'name' => $req->categoryData?->name,
                 ],
-                'status' => $lastActionByUser->status ?? 'pending',
-                'last_action_by_user' => $lastActionByUser ? [
-                    'workflow_id' => $lastActionByUser->workflow_id,
-                    'workflow_step_id' => $lastActionByUser->workflow_step_id,
-                    'workflow_role_id' => $lastActionByUser->workflow_role_id,
-                    'assigned_user_id' => $lastActionByUser->assigned_user_id,
-                    'action_taken_by' => $lastActionByUser->action_taken_by,
-                    'remark' => $lastActionByUser->remark,
-                    'status' => $lastActionByUser->status,
-                    'is_sendback' => $lastActionByUser->is_sendback,
-                    'sendback_remark' => $lastActionByUser->sendback_remark,
-                    'created_at' => $lastActionByUser->created_at,
-                    'updated_at' => $lastActionByUser->updated_at,
-                ] : null,
-                'is_closed' => $request->status === 'closed',
-                'category' => $request->categoryData->name ?? null,
-                'workflow' => $lastActionByUser?->workflowStep->name ?? null,
-                'supplier_name' => $request->supplierData->name ?? null,
-                'created_at' => $request->created_at,
-                'updated_at' => $request->updated_at,
+
+                'entity' => [
+                    'id' => $req->entiti,
+                    'name' => $req->entityData?->name,
+                ],
+
+                'requested_by' => [
+                    'id' => $req->user,
+                    'name' => $req->userData?->name,
+                    'email' => $req->userData?->email,
+                ],
+
+                'request_type' => [
+                    'id' => $req->request_type,
+                    'name' => $req->requestTypeData?->name,
+                ],
+
+                'department' => [
+                    'id' => $department?->id,
+                    'name' => $department?->name,
+                    'budget_code' => $budget?->budget_code ?? $budget?->budget_limit,
+                    'title' => $budget?->title,
+                    'type' => $isBehalf ? 'behalf' : 'self',
+                ],
+
+                'supplier' => [
+                    'id' => $req->supplier_id,
+                    'name' => $req->supplierData?->name,
+                ],
+
+                'expected_date' => $expectedDate,
+
+                'workflow_history' => $workflowTimeline,
+                'status_timeline' => $statusTimeline,
+
+                'documents' => $req->documents->map(fn ($doc) => [
+                    'document_id' => $doc->document_id,
+                    'document' => last(explode('_', $doc->document)),
+                    'url' => asset('storage/requestdocuments/'.$doc->document),
+                ]),
+
+                'po_amount' => $req->poDetails?->po_amount ?? 0,
+                'total_paid' => $req->payments()->sum('payment_amount'),
+
+                'status_flags' => [
+                    'is_po_created' => $req->poDetails()->exists() ? 1 : 0,
+                    'is_delivery_completed' => $req->deliveries()
+                        ->where('is_delivery_completed', 1)
+                        ->exists() ? 1 : 0,
+                    'is_payment_completed' => $req->payments()
+                        ->where('is_payment_completed', 1)
+                        ->exists() ? 1 : 0,
+                ],
             ];
         });
 
@@ -100,7 +300,6 @@ class RequestWorkflowDetailsController extends Controller
         ]);
     }
 
-  
     private function resetNextStepSendback(string $request_id, int $currentStepId): void
     {
         $nextStep = RequestWorkflowDetails::where('request_id', $request_id)
@@ -256,7 +455,7 @@ class RequestWorkflowDetailsController extends Controller
                 'status' => 'approved',
                 'remark' => 'Auto-approved: assigned user entity mismatch',
                 'action_taken_by' => null,
-                'documents' => !empty($uploadedFiles)
+                'documents' => ! empty($uploadedFiles)
                 ? implode(',', $uploadedFiles)
                 : $current->documents,
             ]);
@@ -290,7 +489,7 @@ class RequestWorkflowDetailsController extends Controller
                     'status' => 'approved',
                     'remark' => $request->remark,
                     'action_taken_by' => $user->id,
-                    'documents' => !empty($uploadedFiles)
+                    'documents' => ! empty($uploadedFiles)
                     ? implode(',', $uploadedFiles)
                     : $current->documents,
                 ]);
@@ -331,9 +530,9 @@ class RequestWorkflowDetailsController extends Controller
                         'status' => 'approved',
                         'remark' => $request->remark,
                         'action_taken_by' => $user->id,
-                       'documents' => !empty($uploadedFiles)
-                        ? implode(',', $uploadedFiles)
-                        : $current->documents,
+                        'documents' => ! empty($uploadedFiles)
+                         ? implode(',', $uploadedFiles)
+                         : $current->documents,
                     ]);
 
                 $this->resetNextStepSendback($request_id, $current->workflow_step_id);
@@ -361,7 +560,7 @@ class RequestWorkflowDetailsController extends Controller
                     'action_taken_by' => $user->id,
                     'is_sendback' => 0,
                     'sendback_remark' => null,
-                    'documents' => !empty($uploadedFiles)
+                    'documents' => ! empty($uploadedFiles)
                     ? implode(',', $uploadedFiles)
                     : $current->documents,
                 ]);
@@ -387,7 +586,7 @@ class RequestWorkflowDetailsController extends Controller
                     'remark' => null,
                     'action_taken_by' => $user->id,
                     'status' => 'sentback',
-                    'documents' => !empty($uploadedFiles)
+                    'documents' => ! empty($uploadedFiles)
                     ? implode(',', $uploadedFiles)
                     : $current->documents,
                 ]);

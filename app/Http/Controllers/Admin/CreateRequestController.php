@@ -24,6 +24,7 @@ use App\Services\NotificationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -1405,11 +1406,55 @@ class CreateRequestController extends Controller
         }
     }
 
+    public function serveWorkflowDocument($token)
+    {
+        try {
+
+            // PDF links are encrypted
+            try {
+    $filename = Crypt::decryptString(urldecode($token));
+    } catch (\Exception $e) {
+        $filename = $token;
+    }
+
+        } catch (\Exception $e) {
+            $filename = $token;
+        }
+
+        $filename = basename($filename);
+
+        $path = storage_path('app/public/workflow_documents/'.$filename);
+
+        if (! file_exists($path)) {
+            abort(404, 'Document not found');
+        }
+
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+        $mime = match ($ext) {
+            'pdf' => 'application/pdf',
+            'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'xls' => 'application/vnd.ms-excel',
+            'doc' => 'application/msword',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            default => mime_content_type($path),
+        };
+
+        return response()->file($path, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => in_array($ext, ['pdf', 'jpg', 'jpeg', 'png'])
+                    ? 'inline; filename="'.$filename.'"'
+                    : 'attachment; filename="'.$filename.'"',
+        ]);
+    }
+
     public function downloadRequestPdf($id)
     {
         try {
             $requestData = ModelsRequest::with([
-                'userData:id,name,designation',
+                'userData:id,name,designation,employee_id',
                 'categoryData:id,name',
                 'departmentData:id,name',
                 'supplierData:id,name',
@@ -1470,6 +1515,63 @@ class CreateRequestController extends Controller
 
                     $actionTaken = $stepGroup->whereIn('status', ['approved', 'rejected']);
 
+                    $documents = [];
+
+                    foreach ($stepGroup as $history) {
+
+                        $rawDocuments = (string) ($history->getRawOriginal('documents') ?? $history->documents ?? '');
+
+                        if (empty(trim($rawDocuments))) {
+                            continue;
+                        }
+
+                        foreach (explode(',', $rawDocuments) as $file) {
+                            $file = trim($file);
+                            if (empty($file)) {
+                                continue;
+                            }
+
+                            // ✅ Skip if this filename already added (handles OR logic duplicates)
+                            $alreadyAdded = collect($documents)->pluck('file')->contains($file);
+                            if ($alreadyAdded) {
+                                continue;
+                            }
+
+                            $storagePath = storage_path('app/public/workflow_documents/'.$file);
+                            $fileExists = file_exists($storagePath);
+
+                            $cleanName = preg_replace('/^[^_]+_[^_]+_/', '', $file);
+                            if (empty($cleanName)) {
+                                $cleanName = basename($file);
+                            }
+
+                            $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+
+                            $viewableExtensions = [
+                                'pdf',
+                                'jpg',
+                                'jpeg',
+                                'png',
+                                'gif',
+                                'webp',
+                                'svg',
+                            ];
+
+                            $documents[] = [
+                                'file' => $file,
+                                'name' => $cleanName,
+                                'url' => in_array($ext, $viewableExtensions)
+                                    ? route('workflow.document', [
+                                        'token' => urlencode(Crypt::encryptString($file)),
+                                    ])
+                                    : route('workflow.document', [
+                                        'token' => $file,
+                                    ]),
+                                'exists' => $fileExists,
+                            ];
+                        }
+                    }
+
                     if ($actionTaken->isNotEmpty()) {
                         return [
                             'step' => $stepGroup->first()?->workflowStep?->name,
@@ -1477,11 +1579,11 @@ class CreateRequestController extends Controller
                             'assigned_user' => $actionTaken->pluck('assignedUser.name')->unique()->implode(', '),
                             'last_user' => $actionTaken->pluck('assignedUser.name')->unique()->implode(', '),
                             'status' => $actionTaken->contains('status', 'approved')
-            ? 'approved'
-            : ($actionTaken->contains('status', 'rejected') ? 'rejected' : 'cancelled'), // ← add
-
+                                                ? 'approved'
+                                                : ($actionTaken->contains('status', 'rejected') ? 'rejected' : 'cancelled'),
                             'date' => optional($actionTaken->max('updated_at'))?->format('Y-m-d'),
                             'remark' => $actionTaken->pluck('remark')->filter()->implode(' | '),
+                            'documents' => $documents,
                         ];
                     }
 
@@ -1489,14 +1591,11 @@ class CreateRequestController extends Controller
                         'step' => $stepGroup->first()?->workflowStep?->name ?? 'Approval Step',
                         'role' => $stepGroup->first()?->role?->name ?? 'N/A',
                         'assigned_user' => 'Pending',
-                        'last_user' => $stepGroup
-                            ->pluck('assignedUser.name')
-                            ->filter()
-                            ->unique()
-                            ->implode(', ') ?: 'Pending',
+                        'last_user' => $stepGroup->pluck('assignedUser.name')->filter()->unique()->implode(', ') ?: 'Pending',
                         'status' => 'pending',
                         'date' => null,
                         'remark' => '',
+                        'documents' => $documents,
                     ];
                 })
                 ->values()
@@ -1516,8 +1615,7 @@ class CreateRequestController extends Controller
     ? ($lastStepUsers['last_user'] ?? '-')
     : null;
 
-
-    $lifecycleTimeline = [];
+            $lifecycleTimeline = [];
 
             /* PO Created */
             if (! empty($requestData->poDetails) && ! empty($requestData->poDetails->po_date)) {

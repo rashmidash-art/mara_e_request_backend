@@ -157,8 +157,10 @@
     @else
         <p><del><b>To:</b></del></p>
     @endif
-    <p><b>Requested By:</b> {{ $request->userData?->name ?? '-' }} ({{ $request->userData?->name ?? '-' }})</p>
-    <p><b>Department:</b> {{ $request->departmentData?->name ?? '-' }}</p>
+    <p><b>Requested By:</b> {{ $request->userData?->name ?? '-' }} ({{ $request->userData?->employee_id ?? '-' }},{{ $request->departmentData?->name ?? '-' }}) </p>
+    <p><b>Designation :</b> {{ $request->userData?->designation ?? '-' }} </p>
+    {{-- <p><b>Department:</b> {{ $request->departmentData?->name ?? '-' }}</p>
+    <p><b>Employee ID:</b> {{ $request->userData?->employee_id ?? '-' }}</p> --}}
     <p><b>Date:</b> {{ $request->created_at?->format('Y-m-d') }}</p>
     {{-- <p><b>Request Type:</b> {{ $request->requestTypeData?->name ?? '-' }}</p> --}}
     <p> <b>Subject :</b>{{ $request->title }}</p>
@@ -166,7 +168,8 @@
     <br>
     <h3>Approval Request Details</h3>
     <br>
-    <p><b>Request Type:</b> {{ $request->categoryData?->name ?? '-' }}</p>
+    <p><b>Request Category:</b> {{ $request->categoryData?->name ?? '-' }}</p>
+    <p><b>Request Type:</b> {{ $request->requestTypeData?->name ?? '-' }}</p>
     <p><b>Recommended Vendor :</b> {{ $request->supplierData?->name ?? '-' }}</p>
     <p><b>Budget Item :</b> {{ $budget?->title ?? 'N/A' }}</p>
     <p><b>Budget Code:</b> {{ $budget?->budget_code ?? 'Non-Financial Type' }}</p>
@@ -268,8 +271,28 @@
                     <td colspan="2"></td> {{-- Rejected mark column --}}
                     {{-- <td></td> Rejected text --}}
 
+                    {{-- <td>{{ $step['remark'] ?? '-' }}</td> --}}
                     <td>
-                        {{ $step['remark'] ?? '' }}
+                        {{ $step['remark'] ?? '-' }}
+
+                        @if (!empty($step['documents']))
+                            <br><br>
+                            <strong>Documents:</strong>
+                            @foreach ($step['documents'] as $doc)
+                                <div style="margin-top: 4px;">
+                                    @if ($doc['exists'])
+                                        <a href="{{ $doc['url'] }}" target="_blank" rel="noopener noreferrer">
+                                            📄 {{ $doc['name'] }}
+                                        </a>
+                                    @else
+                                        <span style="color: #999;">⚠ {{ $doc['name'] }} (file not available)</span>
+                                    @endif
+                                </div>
+                            @endforeach
+                        @else
+                            <br>
+                            <span style="color: #aaa; font-size: 10px;">No documents attached</span>
+                        @endif
                     </td>
                 </tr>
             </tbody>
