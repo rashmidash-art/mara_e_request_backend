@@ -151,25 +151,25 @@
     <hr>
     {{-- <h3>Subject : <u>{{ $request->title }}</u></h3> --}}
     <p><b>Request ID:</b> {{ $request->request_id }}</p>
+    <p><b>Request Category:</b> {{ $request->categoryData?->name ?? '-' }}</p>
+    <p><b>Request Type:</b> {{ $request->requestTypeData?->name ?? '-' }}</p>
     {{-- <p><b>To:</b> {{ $toUsers }}</p> --}}
     @if ($toUsers)
         <p><b>To:</b> {{ $toUsers }}</p>
     @else
         <p><del><b>To:</b></del></p>
     @endif
-    <p><b>Requested By:</b> {{ $request->userData?->name ?? '-' }} ({{ $request->userData?->employee_id ?? '-' }},{{ $request->departmentData?->name ?? '-' }}) </p>
-    <p><b>Designation :</b> {{ $request->userData?->designation ?? '-' }} </p>
-    {{-- <p><b>Department:</b> {{ $request->departmentData?->name ?? '-' }}</p>
-    <p><b>Employee ID:</b> {{ $request->userData?->employee_id ?? '-' }}</p> --}}
+    <p><b>Requested By:</b> {{ $request->userData?->name ?? '-' }} ({{ $request->userData?->employee_id ?? '-' }},{{ $request->userData?->designation ?? '-' }}) </p>
+    {{-- <p><b>Designation :</b> {{ $request->userData?->designation ?? '-' }} </p> --}}
+    <p><b>Department:</b> {{ $request->departmentData?->name ?? '-' }}</p>
+    <p><b>Employee ID:</b> {{ $request->userData?->employee_id ?? '-' }}</p>
     <p><b>Date:</b> {{ $request->created_at?->format('Y-m-d') }}</p>
     {{-- <p><b>Request Type:</b> {{ $request->requestTypeData?->name ?? '-' }}</p> --}}
-    <p> <b>Subject :</b>{{ $request->title }}</p>
     <hr>
     <br>
     <h3>Approval Request Details</h3>
     <br>
-    <p><b>Request Category:</b> {{ $request->categoryData?->name ?? '-' }}</p>
-    <p><b>Request Type:</b> {{ $request->requestTypeData?->name ?? '-' }}</p>
+    <p> <b>Subject :</b>{{ $request->title }}</p>
     <p><b>Recommended Vendor :</b> {{ $request->supplierData?->name ?? '-' }}</p>
     <p><b>Budget Item :</b> {{ $budget?->title ?? 'N/A' }}</p>
     <p><b>Budget Code:</b> {{ $budget?->budget_code ?? 'Non-Financial Type' }}</p>
