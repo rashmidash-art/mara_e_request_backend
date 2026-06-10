@@ -1527,11 +1527,10 @@ class CreateRequestController extends Controller
 
                         foreach (explode(',', $rawDocuments) as $file) {
                             $file = trim($file);
+                            $file = trim($file, '"\'');
                             if (empty($file)) {
                                 continue;
                             }
-
-                            // ✅ Skip if this filename already added (handles OR logic duplicates)
                             $alreadyAdded = collect($documents)->pluck('file')->contains($file);
                             if ($alreadyAdded) {
                                 continue;

@@ -402,17 +402,34 @@ class RequestWorkflowDetailsController extends Controller
 
         if ($request->hasFile('documents')) {
             foreach ($request->file('documents') as $file) {
-                $fileName = $request_id.'_'.time().'_'.$file->getClientOriginalName();
-
-                $file->storeAs(
-                    'workflow_documents',
-                    $fileName,
-                    'public'
-                );
-
+                $originalName = $file->getClientOriginalName();
+                $ext = $file->getClientOriginalExtension();
+                $nameWithoutExt = pathinfo($originalName, PATHINFO_FILENAME);
+                $cleanName = preg_replace('/\s*\((\d+)\)/', '-($1)', $nameWithoutExt);
+                $cleanName = preg_replace('/[^\w\-]/', '_', $cleanName);
+                $cleanName = preg_replace('/_+/', '_', $cleanName);
+                $cleanName = trim($cleanName, '_');
+                $uniqueId = bin2hex(random_bytes(8));
+                $fileName = $request_id.'_'.$uniqueId.'_'.$cleanName.'.'.$ext;
+                $file->storeAs('workflow_documents', $fileName, 'public');
                 $uploadedFiles[] = $fileName;
             }
         }
+
+        
+        // if ($request->hasFile('documents')) {
+        //     foreach ($request->file('documents') as $file) {
+        //         $fileName = $request_id.'_'.time().'_'.$file->getClientOriginalName();
+
+        //         $file->storeAs(
+        //             'workflow_documents',
+        //             $fileName,
+        //             'public'
+        //         );
+
+        //         $uploadedFiles[] = $fileName;
+        //     }
+        // }
         if (! $current) {
             return response()->json(['status' => 'error', 'message' => 'No pending workflow for you'], 403);
         }
