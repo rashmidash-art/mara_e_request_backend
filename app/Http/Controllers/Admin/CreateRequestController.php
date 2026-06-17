@@ -1412,10 +1412,10 @@ class CreateRequestController extends Controller
 
             // PDF links are encrypted
             try {
-    $filename = Crypt::decryptString(urldecode($token));
-    } catch (\Exception $e) {
-        $filename = $token;
-    }
+                $filename = Crypt::decryptString(urldecode($token));
+            } catch (\Exception $e) {
+                $filename = $token;
+            }
 
         } catch (\Exception $e) {
             $filename = $token;
@@ -1670,6 +1670,8 @@ class CreateRequestController extends Controller
                 'workflowTimeline' => $workflowTimeline,
                 'lifecycleTimeline' => $lifecycleTimeline,
                 'toUsers' => $toUsers,
+                'budget' => $budget,      
+                'department' => $department,
             ])->setPaper('A4', 'portrait');
 
             return $pdf->download('request-'.$requestData->request_id.'.pdf');

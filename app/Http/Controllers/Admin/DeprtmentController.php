@@ -448,7 +448,7 @@ class DeprtmentController extends Controller
 
     public function getBudgetCodeByDepartment($id)
     {
-        $department = Department::with('budgetCodes')->where('status',0)->findOrFail($id);
+        $department = Department::with('budgetCodes')->where('status',1)->findOrFail($id);
 
         return response()->json([
             'status' => 'success',
