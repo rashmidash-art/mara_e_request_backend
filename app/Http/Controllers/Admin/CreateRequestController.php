@@ -1071,9 +1071,16 @@ class CreateRequestController extends Controller
                 'departmentData:id,name',
                 'supplierData:id,name',
                 'documents:id,request_id,document_id,document',
+                // 'workflowHistory' => function ($q) {
+                //     $q->with(['role', 'assignedUser', 'workflowStep'])
+                //         ->orderBy('id', 'asc');
+                // },
                 'workflowHistory' => function ($q) {
-                    $q->with(['role', 'assignedUser', 'workflowStep'])
-                        ->orderBy('id', 'asc');
+                    $q->with([
+                        'role:id,name',
+                        'workflowStep:id,name',
+                        'assignedUser:id,name,designation',
+                    ])->orderBy('id', 'asc');
                 },
                 'requestDetailsDocuments',
                 'supplierRating',
@@ -1105,9 +1112,16 @@ class CreateRequestController extends Controller
                             'role' => $steps->pluck('role.name')->unique()->join(', '),
                             // 'assigned_user' => $lastAction?->assignedUser?->name,
 
+                            // 'assigned_user' => $lastAction?->assignedUser?->name
+                            //     ?? $steps->pluck('assignedUser.name')->filter()->unique()->join(', ')
+                            //     ?? 'Pending',
                             'assigned_user' => $lastAction?->assignedUser?->name
                                 ?? $steps->pluck('assignedUser.name')->filter()->unique()->join(', ')
                                 ?? 'Pending',
+
+                            'assigned_designation' => $lastAction?->assignedUser?->designation
+                                ?? $steps->pluck('assignedUser.designation')->filter()->unique()->join(', ')
+                                ?? '',
                             'status' => $lastAction?->status ?? 'pending',
                             'date' => $lastAction?->updated_at?->format('Y-m-d H:i'),
                         ];
@@ -1466,7 +1480,7 @@ class CreateRequestController extends Controller
                     $q->with([
                         'workflowStep:id,name',
                         'role:id,name',
-                        'assignedUser:id,name',
+                        'assignedUser:id,name,designation',
                     ])->orderBy('id', 'asc');
                 },
 
@@ -1576,6 +1590,7 @@ class CreateRequestController extends Controller
                             'step' => $stepGroup->first()?->workflowStep?->name,
                             'role' => $actionTaken->pluck('role.name')->unique()->implode(', '),
                             'assigned_user' => $actionTaken->pluck('assignedUser.name')->unique()->implode(', '),
+                            'assigned_designation' => $actionTaken->pluck('assignedUser.designation')->filter()->unique()->implode(', '),
                             'last_user' => $actionTaken->pluck('assignedUser.name')->unique()->implode(', '),
                             'status' => $actionTaken->contains('status', 'approved')
                                                 ? 'approved'
@@ -1590,6 +1605,8 @@ class CreateRequestController extends Controller
                         'step' => $stepGroup->first()?->workflowStep?->name ?? 'Approval Step',
                         'role' => $stepGroup->first()?->role?->name ?? 'N/A',
                         'assigned_user' => 'Pending',
+                        'assigned_designation' => $stepGroup->pluck('assignedUser.designation')->filter()->unique()->implode(', ') ?: '-',
+
                         'last_user' => $stepGroup->pluck('assignedUser.name')->filter()->unique()->implode(', ') ?: 'Pending',
                         'status' => 'pending',
                         'date' => null,
@@ -1670,7 +1687,7 @@ class CreateRequestController extends Controller
                 'workflowTimeline' => $workflowTimeline,
                 'lifecycleTimeline' => $lifecycleTimeline,
                 'toUsers' => $toUsers,
-                'budget' => $budget,      
+                'budget' => $budget,
                 'department' => $department,
             ])->setPaper('A4', 'portrait');
 

@@ -159,7 +159,8 @@
     @else
         <p><del><b>To:</b></del></p>
     @endif
-    <p><b>Requested By:</b> {{ $request->userData?->name ?? '-' }} ({{ $request->userData?->employee_id ?? '-' }},{{ $request->userData?->designation ?? '-' }}) </p>
+    <p><b>Requested By:</b> {{ $request->userData?->name ?? '-' }}
+        ({{ $request->userData?->employee_id ?? '-' }},{{ $request->userData?->designation ?? '-' }}) </p>
     {{-- <p><b>Designation :</b> {{ $request->userData?->designation ?? '-' }} </p> --}}
     <p><b>Department:</b> {{ $request->departmentData?->name ?? '-' }}</p>
     <p><b>Employee ID:</b> {{ $request->userData?->employee_id ?? '-' }}</p>
@@ -221,7 +222,7 @@
             <tr>
                 <td>
                     <strong>{{ $request->userData?->name }}</strong><br>
-                    {{ $request->departmentData?->name ?? 'N/A' }}<br>
+                    {{ $request->departmentData?->name ?? 'N/A' }}({{ $request->userData?->designation ?? '-' }})<br>
                     {{ $request->created_at?->format('d F Y h:i A') }}
                 </td>
             </tr>
@@ -260,7 +261,13 @@
                 <tr>
                     <td>
                         <strong>{{ $step['role'] ?? 'N/A' }} Reviewed by</strong><br>
-                        {{ $step['assigned_user'] ?? '-' }}<br>
+
+                        {{ $step['assigned_user'] ?? '-' }}
+                        @if (!empty($step['assigned_designation']) && $step['assigned_designation'] != '-')
+                            ({{ $step['assigned_designation'] }})
+                        @endif
+                        <br>
+
                         {{ !empty($step['date']) && $step['date'] !== '-'
                             ? \Carbon\Carbon::parse($step['date'])->format('d M Y h:i A')
                             : '-' }}

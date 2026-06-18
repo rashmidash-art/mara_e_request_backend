@@ -302,58 +302,70 @@ class RequestWorkflowDetailsController extends Controller
 
     private function resetNextStepSendback(string $request_id, int $currentStepId): void
     {
-        $nextStep = RequestWorkflowDetails::where('request_id', $request_id)
-            ->where('workflow_step_id', '>', $currentStepId)
-            ->orderBy('workflow_step_id', 'asc')
-            ->first();
+        $currentMaxId = RequestWorkflowDetails::where('request_id', $request_id)
+            ->where('workflow_step_id', $currentStepId)
+            ->max('id');
 
-        if ($nextStep) {
-            //  Reset is_sendback AND status back to pending for ALL records in next step
+        if (! $currentMaxId) {
+            return;
+        }
+
+        $nextStepId = RequestWorkflowDetails::where('request_id', $request_id)
+            ->where('id', '>', $currentMaxId)
+            ->orderBy('id', 'asc')
+            ->value('workflow_step_id');
+
+        if ($nextStepId) {
             RequestWorkflowDetails::where('request_id', $request_id)
-                ->where('workflow_step_id', $nextStep->workflow_step_id)
+                ->where('workflow_step_id', $nextStepId)
                 ->where('is_sendback', 1)
                 ->update([
                     'is_sendback' => 0,
-                    'status' => 'pending',       //  restore so users can act again
-                    'action_taken_by' => null,   //  clear previous action
+                    'status' => 'pending',
+                    'action_taken_by' => null,
                 ]);
         }
     }
 
     private function triggerNextStepNotifications($request_id, $current_step_id)
     {
-        $currentStep = RequestWorkflowDetails::where('request_id', $request_id)
+        // Get the highest rwf id of the current step (in case of multi-user 'and' steps)
+        $currentMaxId = RequestWorkflowDetails::where('request_id', $request_id)
             ->where('workflow_step_id', $current_step_id)
-            ->first();
+            ->max('id');
 
-        if (! $currentStep) {
+        if (! $currentMaxId) {
             return;
         }
 
-        // Find the next step - FIXED: Don't use group_by, use distinct with orderBy
-        $nextStep = RequestWorkflowDetails::where('request_id', $request_id)
-            ->where('workflow_step_id', '>', $current_step_id)
-            ->where('status', 'waiting')
-            ->orderBy('workflow_step_id', 'asc')
-            ->first();
+        // Find the next step's ID by the first rwf row inserted AFTER the current step
+        $nextStepId = RequestWorkflowDetails::where('request_id', $request_id)
+            ->where('id', '>', $currentMaxId)
+            ->whereIn('status', ['waiting', 'pending'])
+            ->orderBy('id', 'asc')
+            ->value('workflow_step_id');
 
-        if (! $nextStep) {
+        if (! $nextStepId) {
             return;
         }
 
-        // Get all users in the next step
+        // Get ALL users assigned to that next step
         $nextStepUsers = RequestWorkflowDetails::where('request_id', $request_id)
-            ->where('workflow_step_id', $nextStep->workflow_step_id)
-            ->where('status', 'waiting')
+            ->where('workflow_step_id', $nextStepId)
+            ->whereIn('status', ['waiting', 'pending'])
             ->get();
+
+        if ($nextStepUsers->isEmpty()) {
+            return;
+        }
 
         $requestData = ModelsRequest::where('request_id', $request_id)->first();
 
         foreach ($nextStepUsers as $stepUser) {
-            // Update status from 'waiting' to 'pending' for the next step
-            $stepUser->update(['status' => 'pending']);
+            if ($stepUser->status === 'waiting') {
+                $stepUser->update(['status' => 'pending']);
+            }
 
-            // Send notification
             NotificationService::send(
                 $stepUser->assigned_user_id,
                 'New Request Assigned',
@@ -365,9 +377,7 @@ class RequestWorkflowDetailsController extends Controller
             );
 
             $approver = User::find($stepUser->assigned_user_id);
-
             if ($approver) {
-
                 MailService::send(
                     $approver,
                     'New Request Assigned',
@@ -416,7 +426,6 @@ class RequestWorkflowDetailsController extends Controller
             }
         }
 
-        
         // if ($request->hasFile('documents')) {
         //     foreach ($request->file('documents') as $file) {
         //         $fileName = $request_id.'_'.time().'_'.$file->getClientOriginalName();
