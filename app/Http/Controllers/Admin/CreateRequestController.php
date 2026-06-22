@@ -1628,8 +1628,8 @@ class CreateRequestController extends Controller
             // Convert assigned users to string
             // $toUsers = $lastStepUsers['last_user'] ?? '-';
             $toUsers = (! empty($workflowTimeline) && ! $allCancelled && ! $isWithdrawn)
-    ? ($lastStepUsers['last_user'] ?? '-')
-    : null;
+            ? ($lastStepUsers['last_user'] ?? '-')
+            : null;
 
             $lifecycleTimeline = [];
 
@@ -1637,7 +1637,7 @@ class CreateRequestController extends Controller
             if (! empty($requestData->poDetails) && ! empty($requestData->poDetails->po_date)) {
                 $lifecycleTimeline[] = [
                     'label' => 'PO Created',
-                    'date' => $requestData->poDetails->po_date,
+                    'date' => $requestData->poDetails->created_at,
                 ];
             }
 
@@ -1649,7 +1649,7 @@ class CreateRequestController extends Controller
             if ($deliveryCompleted && $deliveryCompleted->created_at) {
                 $lifecycleTimeline[] = [
                     'label' => 'Delivery Completed',
-                    'date' => $deliveryCompleted->created_at->format('Y-m-d'),
+                    'date' => $deliveryCompleted->created_at,
                 ];
             }
 
@@ -1661,7 +1661,7 @@ class CreateRequestController extends Controller
             if ($paymentCompleted && $paymentCompleted->created_at) {
                 $lifecycleTimeline[] = [
                     'label' => 'Payment Completed',
-                    'date' => $paymentCompleted->created_at->format('Y-m-d'),
+                    'date' => $paymentCompleted->created_at,
                 ];
             }
 
@@ -1669,7 +1669,7 @@ class CreateRequestController extends Controller
             if (! empty($requestData->supplierRating) && $requestData->supplierRating->created_at) {
                 $lifecycleTimeline[] = [
                     'label' => 'Supplier Rated',
-                    'date' => $requestData->supplierRating->created_at->format('Y-m-d'),
+                    'date' => $requestData->supplierRating->created_at,
                 ];
             }
 
@@ -1677,7 +1677,7 @@ class CreateRequestController extends Controller
             if ($requestData->status === 'closed' && $requestData->updated_at) {
                 $lifecycleTimeline[] = [
                     'label' => 'Closed',
-                    'date' => $requestData->updated_at->format('Y-m-d'),
+                    'date' => $requestData->updated_at,
                 ];
             }
 
