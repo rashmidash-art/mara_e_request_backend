@@ -1595,7 +1595,8 @@ class CreateRequestController extends Controller
                             'status' => $actionTaken->contains('status', 'approved')
                                                 ? 'approved'
                                                 : ($actionTaken->contains('status', 'rejected') ? 'rejected' : 'cancelled'),
-                            'date' => optional($actionTaken->max('updated_at'))?->format('Y-m-d'),
+                            // 'date' => optional($actionTaken->max('updated_at'))?->format('Y-m-d'),
+                            'date' => $actionTaken->max('updated_at'),
                             'remark' => $actionTaken->pluck('remark')->filter()->implode(' | '),
                             'documents' => $documents,
                         ];
